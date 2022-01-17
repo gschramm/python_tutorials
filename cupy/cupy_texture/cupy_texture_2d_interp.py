@@ -1,7 +1,7 @@
 # TODO: (1) understand 0.5 extra shift, (2) bilin. interp in 3D arrays -> all directions, (3) residual in tex interp
 
 import cupy as cp
-from cupyx.scipy.ndimage.interpolation import shift, map_coordinates
+from cupyx.scipy.ndimage.interpolation import map_coordinates
 
 
 source=r'''
@@ -48,7 +48,6 @@ texobj = cp.cuda.texture.TextureObject(res, tex)
 tex_data = cp.arange(1, dim0*dim1 + 1, dtype=cp.float32).reshape(dim1, dim0)
 arr.copy_from(tex_data)
  
-#
 output = cp.zeros(n, dtype = cp.float32)
 x0     = cp.floor((dim0*cp.random.rand(n)).astype(cp.float32)) + (17/256)
 x1     = cp.floor((dim1*cp.random.rand(n)).astype(cp.float32)) + (87/256)   
