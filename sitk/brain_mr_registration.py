@@ -11,12 +11,13 @@ import pymirc.viewer as pv
 import numpy as np
 from scipy.ndimage import gaussian_filter
 from pathlib import Path
+from time import time
 
 # input parameters
 
-rel_noise_level = 6.    # relative noise level of the simulated PET image
-fwhm_mm         = 6.    # resolution of the simulated PET image
-lr              = 0.5   # learning rate / step size of the Gradient-based optimizer
+rel_noise_level = 16.   # relative noise level of the simulated PET image
+fwhm_mm         = 6     # resolution of the simulated PET image
+lr              = 1.    # learning rate / step size of the Gradient-based optimizer
 random_sampling_fraction = 0.1
 
 #---------------------------------------------------------------------------------------------------
@@ -116,13 +117,14 @@ registration_method.SmoothingSigmasAreSpecifiedInPhysicalUnitsOn()
 # Don't optimize in-place, we would possibly like to run this cell multiple times.
 registration_method.SetInitialTransform(initial_transform, inPlace=False)
 
+t0 = time()
 final_transform = registration_method.Execute(
     sitk.Cast(fixed_image, sitk.sitkFloat32), sitk.Cast(moving_image, sitk.sitkFloat32)
 )
-
+t1 = time()
 
 # Post registration analysis
-
+print(f'run time {t1 - t0}s')
 print(f"Optimizer's stopping condition, {registration_method.GetOptimizerStopConditionDescription()}")
 print(f"Final metric value: {registration_method.GetMetricValue()}")
 print(f"Final parameters .: {final_transform.GetParameters()}")
