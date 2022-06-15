@@ -3,9 +3,9 @@ import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter
 from utils import RotationBased2DProjector, PETAcquisitionModel, OS_MLEM, test_images
 
-nreal      = 50
+nreal      = 100
 niter      = 5
-ps_FWHM_mm = 5.5
+ps_FWHM_mm = 6.5
 
 plt.rcParams['image.cmap'] = 'Greys'
 np.random.seed(1)
@@ -41,11 +41,17 @@ for i in range(nreal):
 recon_mean = recons.mean(axis = 0)
 recon_var  = recons.var(axis = 0, ddof = 1)
 
+recon_sm_mean = recons_sm.mean(axis = 0)
+recon_sm_var  = recons_sm.var(axis = 0, ddof = 1)
+
 # plots
-fig, ax = plt.subplots(1,3, figsize = (9,3))
-ax[0].imshow(recons[0,...], vmin = 0 , vmax = 1.5*em_img.max())
-ax[1].imshow(recon_mean, vmin = 0 , vmax = 1.5*em_img.max())
-ax[2].imshow(recon_var)
+fig, ax = plt.subplots(2,3, figsize = (9,6))
+ax[0,0].imshow(recons[0,...], vmin = 0 , vmax = 1.5*em_img.max())
+ax[0,1].imshow(recon_mean, vmin = 0 , vmax = 1.5*em_img.max())
+ax[0,2].imshow(recon_var)
+ax[1,0].imshow(recons_sm[0,...], vmin = 0 , vmax = 1.5*em_img.max())
+ax[1,1].imshow(recon_sm_mean, vmin = 0 , vmax = 1.5*em_img.max())
+ax[1,2].imshow(recon_sm_var)
 fig.tight_layout()
 fig.show()
 
