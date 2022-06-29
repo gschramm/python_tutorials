@@ -57,8 +57,10 @@ class RotationBased2DProjector:
     self.subset_sino_shapes = []
 
     shuffled_views = np.zeros(self.num_subsets, dtype = np.int16)
-    shuffled_views[0::2] = np.arange(0, self.num_subsets//2)
-    shuffled_views[1::2] = np.arange(self.num_subsets//2, self.num_subsets)
+
+    if self.num_subsets > 1:
+      shuffled_views[0::2] = np.arange(0, self.num_subsets//2)
+      shuffled_views[1::2] = np.arange(self.num_subsets//2, self.num_subsets)
 
     for i, v in enumerate(shuffled_views):
       self.subset_slices.append((slice(v,None,num_subsets), slice(None,None,None)))
