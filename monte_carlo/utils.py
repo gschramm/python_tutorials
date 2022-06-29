@@ -102,7 +102,7 @@ class RotationBased2DProjector:
 #-----------------------------------------------------------------------------------------------
 
 class PETAcquisitionModel:
-  def __init__(self, proj, attenuation_img, res_FWHM_mm = 5.5, contamination = 1e-3, sensitivity = 4.):
+  def __init__(self, proj, attenuation_img, res_FWHM_mm = 5.5, contamination = 1e-3, sensitivity = 2.):
     """ PET data acquisition model
 
     Parameters
@@ -163,6 +163,12 @@ class PETAcquisitionModel:
 
     return img
 
+
+  def init_image(self):
+    img = np.zeros(self.proj.img_shape)
+    img[np.where(self.proj.mask)] = 1
+
+    return img
          
 #-----------------------------------------------------------------------------------------------
 
