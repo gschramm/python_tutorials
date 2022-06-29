@@ -65,6 +65,9 @@ class DicomListener:
       print('peer AE      ..:', self.last_peer_ae_tile)
       print('peer port    ..:', self.last_peer_port)    
       print('')
+
+      if self.last_ds.Modality == 'DOC':
+        print(self.last_ds.EncapsulatedDocument.decode("utf-8"))
   
   def handle_echo(self,event):
     print('XXXXXX echo')
