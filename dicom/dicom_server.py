@@ -9,12 +9,14 @@ import threading
 #debug_logger()
 
 class DicomListener:
-  def __init__(self):
+  def __init__(self, storage_dir = Path('.')):
     self.last_dcm_storage_dir = None
     self.last_peer_address    = None
     self.last_peer_ae_tile    = None
     self.last_peer_port       = None
     self.last_ds              = None
+    self.storage_dir          = storage_dir.resolve()
+
 
   # Implement a handler for evt.EVT_C_STORE
   def handle_store(self,event):
@@ -41,12 +43,17 @@ class DicomListener:
     # get string of series description and remove all non alpha-num characters
     sdesc = ''.join(filter(str.isalnum, self.last_ds.SeriesDescription))
   
-    self.last_dcm_storage_dir = (Path(f'{self.last_ds.StudyDate}_{self.last_ds.PatientID}_{self.last_ds.StudyInstanceUID}') / f'{self.last_ds.Modality}_{sdesc}_{self.last_ds.SeriesInstanceUID}').resolve()
+    self.last_dcm_storage_dir = self.storage_dir / f'{self.last_ds.StudyDate}_{self.last_ds.PatientID}_{self.last_ds.StudyInstanceUID}' / f'{self.last_ds.Modality}_{sdesc}_{self.last_ds.SeriesInstanceUID}'
     self.last_dcm_storage_dir.mkdir(exist_ok = True, parents = True)
   
     # Save the dataset using the SOP Instance UID as the filename
     self.last_ds.save_as(self.last_dcm_storage_dir / f'{self.last_ds.SOPInstanceUID}.dcm', write_like_original = True)
   
+    # if Modality is RTstruct, save the referenced series UID as txt file
+    if self.last_ds.Modality == 'RTSTRUCT':
+      refSeriesUID = self.last_ds.ReferencedFrameOfReferenceSequence[0].RTReferencedStudySequence[0].RTReferencedSeriesSequence[0].SeriesInstanceUID
+      (self.last_dcm_storage_dir / f'{refSeriesUID}.rtxt').touch()
+
     # Return a 'Success' status
     return 0x0000
   
@@ -59,6 +66,7 @@ class DicomListener:
     if self.last_dcm_storage_dir is not None:
       print('')
       print('series desc  ..:', self.last_ds.SeriesDescription)
+      print('series UID   ..:', self.last_ds.SeriesInstanceUID)
       print('modality     ..:', self.last_ds.Modality)
       print('storage dir  ..:', self.last_dcm_storage_dir)
       print('peer address ..:', self.last_peer_address)
@@ -66,8 +74,24 @@ class DicomListener:
       print('peer port    ..:', self.last_peer_port)    
       print('')
 
-      if self.last_ds.Modality == 'DOC':
-        print(self.last_ds.EncapsulatedDocument.decode("utf-8"))
+      # if the incoming dicom data is CT or MR, we check wether an RTstruct defined
+      # on that series exist 
+
+      if self.last_ds.Modality == 'CT' or self.last_ds.Modality == 'MR':
+        rtxt_files = list(self.last_dcm_storage_dir.parent.rglob(f'{self.last_ds.SeriesInstanceUID}.rtxt'))
+
+        if len(rtxt_files) == 0:
+          # no corresponding RTstruct file exists, run workflow 1
+          print('running workflow 1')
+          print('image    input', self.last_dcm_storage_dir)
+        else:
+          # corresponding RTstruct file exists, run workflow 2
+          print('running workflow 2')
+          print('image    input', self.last_dcm_storage_dir)
+          print('RTstruct input', rtxt_files[0].parent)
+ 
+      #if self.last_ds.Modality == 'DOC':
+      #  print(self.last_ds.EncapsulatedDocument.decode("utf-8"))
   
   def handle_echo(self,event):
     print('XXXXXX echo')
@@ -75,7 +99,7 @@ class DicomListener:
 #------------------------------------------------------------------------------------------------
 
 if __name__ == '__main__':
-  dcm_listener = DicomListener()
+  dcm_listener = DicomListener(Path.home() / 'tmp' / 'dcm')
   
   handlers = [(evt.EVT_C_STORE,  dcm_listener.handle_store), 
               (evt.EVT_RELEASED, dcm_listener.handle_released),
