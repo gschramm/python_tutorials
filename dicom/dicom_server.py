@@ -1,5 +1,6 @@
 import socket
 from pynetdicom import AE, evt, AllStoragePresentationContexts, debug_logger
+from pydicom.dataset import FileDataset
 from pathlib import Path
 
 from time import sleep
@@ -11,6 +12,7 @@ import threading
 class DicomListener:
   def __init__(self, storage_dir = Path('.')):
     self.last_dcm_storage_dir = None
+    self.last_dcm_fname       = None
     self.last_peer_address    = None
     self.last_peer_ae_tile    = None
     self.last_peer_port       = None
@@ -21,6 +23,7 @@ class DicomListener:
   # Implement a handler for evt.EVT_C_STORE
   def handle_store(self,event):
     self.last_dcm_storage_dir = None
+    self.last_dcm_fname       = None
     self.last_peer_address    = None
     self.last_peer_ae_tile    = None
     self.last_peer_port       = None
@@ -34,20 +37,18 @@ class DicomListener:
     self.last_peer_ae_tile = assoc.remote['ae_title']
     self.last_peer_port    = assoc.remote['port']
   
-    # Decode the C-STORE request's *Data Set* parameter to a pydicom Dataset
-    self.last_ds = event.dataset
-  
-    # Add the File Meta Information
-    self.last_ds.file_meta = event.file_meta
-  
     # get string of series description and remove all non alpha-num characters
-    sdesc = ''.join(filter(str.isalnum, self.last_ds.SeriesDescription))
+    sdesc = ''.join(filter(str.isalnum, event.dataset.SeriesDescription))
   
-    self.last_dcm_storage_dir = self.storage_dir / f'{self.last_ds.StudyDate}_{self.last_ds.PatientID}_{self.last_ds.StudyInstanceUID}' / f'{self.last_ds.Modality}_{sdesc}_{self.last_ds.SeriesInstanceUID}'
+    self.last_dcm_storage_dir = self.storage_dir / f'{event.dataset.StudyDate}_{event.dataset.PatientID}_{event.dataset.StudyInstanceUID}' / f'{event.dataset.Modality}_{sdesc}_{event.dataset.SeriesInstanceUID}'
     self.last_dcm_storage_dir.mkdir(exist_ok = True, parents = True)
-  
+ 
+    self.last_dcm_fname = self.last_dcm_storage_dir / f'{event.dataset.SOPInstanceUID}.dcm'
+ 
     # Save the dataset using the SOP Instance UID as the filename
-    self.last_ds.save_as(self.last_dcm_storage_dir / f'{self.last_ds.SOPInstanceUID}.dcm', write_like_original = True)
+    self.last_ds = FileDataset(self.last_dcm_fname, event.dataset, file_meta = event.file_meta)
+
+    self.last_ds.save_as(self.last_dcm_fname, write_like_original = False)
   
     # if Modality is RTstruct, save the referenced series UID as txt file
     if self.last_ds.Modality == 'RTSTRUCT':
