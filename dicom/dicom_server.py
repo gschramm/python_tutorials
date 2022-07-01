@@ -1,3 +1,4 @@
+import sys
 import socket
 from pynetdicom import AE, evt, AllStoragePresentationContexts, debug_logger, StoragePresentationContexts
 import pydicom
@@ -15,8 +16,41 @@ import pymirc.fileio as pf
 
 from datetime import datetime
 
+import logging
+from logging.handlers import TimedRotatingFileHandler
+
 #----------------------------------------------------------------------------------------------------------------
-def send_dcm_files_to_server(dcm_file_list, dcm_server_ip, dcm_server_port, verbose = True):
+def setup_logger(log_path, level = logging.INFO, formatter = None, mode = 'a'):
+  """ wrapper function to setup a file logger with some usefule properties (format, file replacement ...)
+  """
+
+  # create log file if it does not exist
+  if not log_path.exists():
+    log_path.touch() 
+
+  if formatter is None:
+    formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s', datefmt = '%Y/%d/%m %I:%M:%S %p')
+
+  logger = logging.getLogger()
+  logger.setLevel(level)
+  logger.handlers = []
+
+  # log to file  
+  handler = TimedRotatingFileHandler(filename = log_path, when = 'D', interval = 7, backupCount = 4, 
+                                     encoding = 'utf-8', delay = False)
+  handler.setFormatter(formatter)
+  logger.addHandler(handler)
+
+  # log to stdout as well
+  streamHandler = logging.StreamHandler(sys.stdout)
+  streamHandler.setFormatter(formatter)
+  logger.addHandler(streamHandler)
+
+  return logger
+
+
+#----------------------------------------------------------------------------------------------------------------
+def send_dcm_files_to_server(dcm_file_list, dcm_server_ip, dcm_server_port, logger):
   # Initialise the Application Entity
   ae = AE()
   ae.requested_contexts = StoragePresentationContexts
@@ -24,32 +58,32 @@ def send_dcm_files_to_server(dcm_file_list, dcm_server_ip, dcm_server_port, verb
   
   assoc = ae.associate(dcm_server_ip, dcm_server_port)
   if assoc.is_established:
-    if verbose: print('Association established')
+    logger.info('Association established')
   
     # Use the C-STORE service to send the dataset
     # returns the response status as a pydicom Dataset
 
     for dcm_file in dcm_file_list:
-      if verbose: print(dcm_file)
+      logger.info(f'sending {dcm_file}')
       dcm = pydicom.read_file(dcm_file)
       status = assoc.send_c_store(dcm, originator_aet = 'Fermi')
   
       # Check the status of the storage request
       if status:
         # If the storage request succeeded this will be 0x0000
-        if verbose: print('C-STORE request status: 0x{0:04x}'.format(status.Status))
+        logger.info('C-STORE request status: 0x{0:04x}'.format(status.Status))
       else:
-        if verbose: print('Connection timed out, was aborted or received invalid response')
+        logger.info('Connection timed out, was aborted or received invalid response')
   
     # Release the association
     assoc.release()
-    if verbose: print('Association released')
+    logger.info('Association released')
   else:
-    if verbose: print('Association rejected, aborted or never connected')
+    logger.info('Association rejected, aborted or never connected')
 
 
 #----------------------------------------------------------------------------------------------------------------
-def dummy_workflow_2(img_dcm_path, rtst_dcm_path, rtstruct_output_fname, sending_address, sending_port):
+def dummy_workflow_2(img_dcm_path, rtst_dcm_path, rtstruct_output_fname, sending_address, sending_port, logger):
   rtstruct_file = str(list(rtst_dcm_path.glob('*.dcm'))[0])
   
   # read the dicom volume
@@ -74,11 +108,11 @@ def dummy_workflow_2(img_dcm_path, rtst_dcm_path, rtstruct_output_fname, sending
   
   pf.labelvol_to_rtstruct(roi_vol2, dcm.affine, dcm.filelist[0], str(rtstruct_output_fname), 
                           tags_to_add = {'SpecificCharacterSet':'ISO_IR 192'})
-  print(f'wrote {rtstruct_output_fname}')
+  logger.info(f'wrote {rtstruct_output_fname}')
 
   # send new rtstruct back to server
-  print('sending RTstruct back')
-  send_dcm_files_to_server([rtstruct_output_fname], sending_address, sending_port, verbose = True)
+  logger.info('sending RTstruct back')
+  send_dcm_files_to_server([rtstruct_output_fname], sending_address, sending_port, logger)
 
 
 
@@ -91,6 +125,8 @@ class DicomListener:
     self.sending_port        = sending_port 
     self.cleanup_process_dir = cleanup_process_dir
 
+    self.logger = setup_logger(self.storage_dir / 'dicom_process.log')
+    self.logger.info('intializing dicom processor')
 
     self.last_dcm_storage_dir = None
     self.last_dcm_fname       = None
@@ -138,21 +174,21 @@ class DicomListener:
     return 0x0000
   
   def handle_accepted(self,event):
-    print('XXXXXX accepted')
+    self.logger.info('accepted')
   
   def handle_released(self,event):
-    print('XXXXXX released')
+    self.logger.info('released')
     # start processing here
     if self.last_dcm_storage_dir is not None:
-      print('')
-      print('series desc  ..:', self.last_ds.SeriesDescription)
-      print('series UID   ..:', self.last_ds.SeriesInstanceUID)
-      print('modality     ..:', self.last_ds.Modality)
-      print('storage dir  ..:', self.last_dcm_storage_dir)
-      print('peer address ..:', self.last_peer_address)
-      print('peer AE      ..:', self.last_peer_ae_tile)
-      print('peer port    ..:', self.last_peer_port)    
-      print('')
+      self.logger.info('')
+      self.logger.info(f'series desc  ..: {self.last_ds.SeriesDescription}')
+      self.logger.info(f'series UID   ..: {self.last_ds.SeriesInstanceUID}')
+      self.logger.info(f'modality     ..: {self.last_ds.Modality}')
+      self.logger.info(f'storage dir  ..: {self.last_dcm_storage_dir}')
+      self.logger.info(f'peer address ..: {self.last_peer_address}')
+      self.logger.info(f'peer AE      ..: {self.last_peer_ae_tile}')
+      self.logger.info(f'peer port    ..: {self.last_peer_port}')    
+      self.logger.info('')
 
       # if the incoming dicom data is CT or MR, we check wether an RTstruct defined
       # on that series exist 
@@ -162,38 +198,45 @@ class DicomListener:
 
         if len(rtxt_files) == 0:
           # no corresponding RTstruct file exists, run workflow 1
-          print('running workflow 1')
-          print('image    input', self.last_dcm_storage_dir)
+          self.logger.info('running workflow 1')
+          self.logger.info('image    input', self.last_dcm_storage_dir)
         else:
           # corresponding RTstruct file exists, run workflow 2
-          print('running workflow 2')
-          print('image    input', self.last_dcm_storage_dir)
-          print('RTstruct input', rtxt_files[0].parent)
+          self.logger.info('running workflow 2')
+          try:
+            self.logger.info(f'image    input {self.last_dcm_storage_dir}')
+            self.logger.info(f'RTstruct input {rtxt_files[0].parent}')
 
-          # move input dicom series into process dir
-          process_dir = self.processing_dir / f'{datetime.now().strftime("%Y%m%d_%H%M%S")}_{self.last_dcm_storage_dir.parent.name}'
-          process_dir.mkdir(exist_ok = True, parents = True)
+            # move input dicom series into process dir
+            process_dir = self.processing_dir / f'{datetime.now().strftime("%Y%m%d_%H%M%S")}_{self.last_dcm_storage_dir.parent.name}'
+            process_dir.mkdir(exist_ok = True, parents = True)
          
-          shutil.move(self.last_dcm_storage_dir, process_dir / 'image') 
-          shutil.move(rtxt_files[0].parent, process_dir / 'rtstruct') 
+            shutil.move(self.last_dcm_storage_dir, process_dir / 'image') 
+            self.logger.info(f'moving {self.last_dcm_storage_dir} to {process_dir / "image"}')
+            shutil.move(rtxt_files[0].parent, process_dir / 'rtstruct') 
+            self.logger.info(f'moving {rtxt_files[0].parent} to {process_dir / "rtstruct"}') 
 
-          # check if study dir is empty after moving series, and delete if it is
-          if not any(Path(self.last_dcm_storage_dir.parent).iterdir()):
-            shutil.rmtree(self.last_dcm_storage_dir.parent)
+            # check if study dir is empty after moving series, and delete if it is
+            if not any(Path(self.last_dcm_storage_dir.parent).iterdir()):
+              shutil.rmtree(self.last_dcm_storage_dir.parent)
+              self.logger.info(f'removed empty dir {self.last_dcm_storage_dir.parent}')
 
-          # run dummy workflow to create new RTstruct
-          output_rstruct_fname = process_dir / 'dummy_rtstruct_2.dcm'
-          dummy_workflow_2(process_dir / 'image', process_dir / 'rtstruct', output_rstruct_fname,
-                           self.last_peer_address, self.sending_port)
-          
-          if self.cleanup_process_dir:
-            shutil.rmtree(process_dir)
+            # run dummy workflow to create new RTstruct
+            output_rstruct_fname = process_dir / 'dummy_rtstruct_2.dcm'
+            dummy_workflow_2(process_dir / 'image', process_dir / 'rtstruct', output_rstruct_fname,
+                             self.last_peer_address, self.sending_port, self.logger)
+            
+            if self.cleanup_process_dir:
+              shutil.rmtree(process_dir)
+              self.logger.info(f'removed {process_dir}')
+          except:
+            logger.error('workflow 2 failed')  
 
       #if self.last_ds.Modality == 'DOC':
-      #  print(self.last_ds.EncapsulatedDocument.decode("utf-8"))
+      #  self.logger.info(self.last_ds.EncapsulatedDocument.decode("utf-8"))
   
   def handle_echo(self,event):
-    print('XXXXXX echo')
+    self.logger.info('echo')
 
 #------------------------------------------------------------------------------------------------
 
