@@ -84,6 +84,7 @@ def send_dcm_files_to_server(dcm_file_list, dcm_server_ip, dcm_server_port, logg
 
 #----------------------------------------------------------------------------------------------------------------
 def dummy_workflow_2(img_dcm_path, rtst_dcm_path, rtstruct_output_fname, sending_address, sending_port, logger):
+
   rtstruct_file = str(list(rtst_dcm_path.glob('*.dcm'))[0])
   
   # read the dicom volume
@@ -199,7 +200,7 @@ class DicomListener:
         if len(rtxt_files) == 0:
           # no corresponding RTstruct file exists, run workflow 1
           self.logger.info('running workflow 1')
-          self.logger.info('image    input', self.last_dcm_storage_dir)
+          self.logger.info(f'image input {self.last_dcm_storage_dir}')
         else:
           # corresponding RTstruct file exists, run workflow 2
           self.logger.info('running workflow 2')
@@ -230,7 +231,7 @@ class DicomListener:
               shutil.rmtree(process_dir)
               self.logger.info(f'removed {process_dir}')
           except:
-            logger.error('workflow 2 failed')  
+            self.logger.error('workflow 2 failed')  
 
       #if self.last_ds.Modality == 'DOC':
       #  self.logger.info(self.last_ds.EncapsulatedDocument.decode("utf-8"))
