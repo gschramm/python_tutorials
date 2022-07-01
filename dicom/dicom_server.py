@@ -6,8 +6,8 @@ from pydicom.dataset import FileDataset
 from pathlib import Path
 import shutil
 
-from time import sleep
-import threading
+import time
+import threading, queue
 
 import numpy as np
 from scipy.ndimage import binary_dilation
@@ -20,7 +20,7 @@ import logging
 from logging.handlers import TimedRotatingFileHandler
 
 #----------------------------------------------------------------------------------------------------------------
-def setup_logger(log_path, level = logging.INFO, formatter = None, mode = 'a'):
+def setup_logger(log_path, name = 'logger', level = logging.INFO, formatter = None, mode = 'a'):
   """ wrapper function to setup a file logger with some usefule properties (format, file replacement ...)
   """
 
@@ -31,22 +31,22 @@ def setup_logger(log_path, level = logging.INFO, formatter = None, mode = 'a'):
   if formatter is None:
     formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s', datefmt = '%Y/%d/%m %I:%M:%S %p')
 
-  logger = logging.getLogger()
-  logger.setLevel(level)
-  logger.handlers = []
+  lg = logging.getLogger(name)
+  lg.setLevel(level)
+  lg.handlers = []
 
   # log to file  
   handler = TimedRotatingFileHandler(filename = log_path, when = 'D', interval = 7, backupCount = 4, 
                                      encoding = 'utf-8', delay = False)
   handler.setFormatter(formatter)
-  logger.addHandler(handler)
+  lg.addHandler(handler)
 
   # log to stdout as well
   streamHandler = logging.StreamHandler(sys.stdout)
   streamHandler.setFormatter(formatter)
-  logger.addHandler(streamHandler)
+  lg.addHandler(streamHandler)
 
-  return logger
+  return lg
 
 
 #----------------------------------------------------------------------------------------------------------------
@@ -83,14 +83,18 @@ def send_dcm_files_to_server(dcm_file_list, dcm_server_ip, dcm_server_port, logg
 
 
 #----------------------------------------------------------------------------------------------------------------
-def dummy_workflow_2(img_dcm_path, rtst_dcm_path, rtstruct_output_fname, sending_address, sending_port, logger):
+def dummy_seg(process_dir, sending_address, sending_port, logger):
 
-  rtstruct_file = str(list(rtst_dcm_path.glob('*.dcm'))[0])
+  # rtstruct file
+  rtstruct_file = str(list((process_dir / 'rtstruct').glob('*.dcm'))[0])
   
   # read the dicom volume
-  dcm = pf.DicomVolume(str(Path(img_dcm_path / '*.dcm')))
+  dcm = pf.DicomVolume(str(process_dir / 'image' / '*.dcm'))
   vol = dcm.get_data()
   
+  # output file name
+  rtstruct_output_fname = str(process_dir / 'dummy_seg.dcm')
+
   # read the ROI contours (in world coordinates)
   contour_data = pf.read_rtstruct_contour_data(rtstruct_file)
   
@@ -107,7 +111,7 @@ def dummy_workflow_2(img_dcm_path, rtst_dcm_path, rtstruct_output_fname, sending
   # create dilated ROI
   roi_vol2 = binary_dilation(roi_vol, iterations = 3)
   
-  pf.labelvol_to_rtstruct(roi_vol2, dcm.affine, dcm.filelist[0], str(rtstruct_output_fname), 
+  pf.labelvol_to_rtstruct(roi_vol2, dcm.affine, dcm.filelist[0], rtstruct_output_fname, 
                           tags_to_add = {'SpecificCharacterSet':'ISO_IR 192'})
   logger.info(f'wrote {rtstruct_output_fname}')
 
@@ -126,7 +130,12 @@ class DicomListener:
     self.sending_port        = sending_port 
     self.cleanup_process_dir = cleanup_process_dir
 
-    self.logger = setup_logger(self.storage_dir / 'dicom_process.log')
+    self.processing_queue    = queue.Queue()
+    threading.Thread(target = self.worker, daemon = True).start()
+
+    self.logger = setup_logger(self.storage_dir / 'dicom_process.log', name = 'dicom_io_logger')
+
+
     self.logger.info('intializing dicom processor')
 
     self.last_dcm_storage_dir = None
@@ -135,6 +144,7 @@ class DicomListener:
     self.last_peer_ae_tile    = None
     self.last_peer_port       = None
     self.last_ds              = None
+
 
   # Implement a handler for evt.EVT_C_STORE
   def handle_store(self,event):
@@ -197,13 +207,9 @@ class DicomListener:
       if self.last_ds.Modality == 'CT' or self.last_ds.Modality == 'MR':
         rtxt_files = list(self.last_dcm_storage_dir.parent.rglob(f'{self.last_ds.SeriesInstanceUID}.rtxt'))
 
-        if len(rtxt_files) == 0:
-          # no corresponding RTstruct file exists, run workflow 1
-          self.logger.info('running workflow 1')
-          self.logger.info(f'image input {self.last_dcm_storage_dir}')
-        else:
+        if len(rtxt_files) > 0:
           # corresponding RTstruct file exists, run workflow 2
-          self.logger.info('running workflow 2')
+          self.logger.info('submitting to processin queue')
           try:
             self.logger.info(f'image    input {self.last_dcm_storage_dir}')
             self.logger.info(f'RTstruct input {rtxt_files[0].parent}')
@@ -222,22 +228,39 @@ class DicomListener:
               shutil.rmtree(self.last_dcm_storage_dir.parent)
               self.logger.info(f'removed empty dir {self.last_dcm_storage_dir.parent}')
 
-            # run dummy workflow to create new RTstruct
-            output_rstruct_fname = process_dir / 'dummy_rtstruct_2.dcm'
-            dummy_workflow_2(process_dir / 'image', process_dir / 'rtstruct', output_rstruct_fname,
-                             self.last_peer_address, self.sending_port, self.logger)
-            
-            if self.cleanup_process_dir:
-              shutil.rmtree(process_dir)
-              self.logger.info(f'removed {process_dir}')
+            # submit new processing job to the processing queue
+            self.processing_queue.put((process_dir, self.last_peer_address))
+            self.logger.info(f'adding to process queue {process_dir}')
+            self.logger.info(f'current queue size {self.processing_queue.qsize()}')
+
           except:
-            self.logger.error('workflow 2 failed')  
+            self.logger.error('submitting processing to queue failed')  
 
       #if self.last_ds.Modality == 'DOC':
       #  self.logger.info(self.last_ds.EncapsulatedDocument.decode("utf-8"))
   
   def handle_echo(self,event):
     self.logger.info('echo')
+
+  def worker(self):
+    while True:
+      process_dir, peer_address = self.processing_queue.get()
+      process_logger = setup_logger(process_dir.with_suffix('.log'), name = process_dir.name)
+
+      try:
+        process_logger.info(f'Working on {process_dir}')
+        dummy_seg(process_dir, peer_address, self.sending_port, process_logger)
+
+        if self.cleanup_process_dir:
+          shutil.rmtree(process_dir)
+          process_logger.info(f'removed {process_dir}')
+
+        process_logger.info(f'Finished {process_dir}')
+      except:
+        process_logger.error('worker job failed')
+
+      del process_logger
+      self.processing_queue.task_done()
 
 #------------------------------------------------------------------------------------------------
 
