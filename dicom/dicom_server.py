@@ -124,19 +124,17 @@ def dummy_seg(process_dir, sending_address, sending_port, logger):
 #----------------------------------------------------------------------------------------------------------------
 class DicomListener:
   def __init__(self, storage_dir = Path('.'), processing_dir = Path('.') / 'processing', 
-                     sending_port = 104, cleanup_process_dir = True):
+                     sending_port = 104, cleanup_process_dir = True, timeout = 60):
     self.storage_dir         = storage_dir.resolve()
     self.processing_dir      = processing_dir.resolve()
     self.sending_port        = sending_port 
     self.cleanup_process_dir = cleanup_process_dir
-
-    self.processing_queue    = queue.Queue()
-    threading.Thread(target = self.worker, daemon = True).start()
+    self.timeout             = timeout
 
     self.logger = setup_logger(self.storage_dir / 'dicom_process.log', name = 'dicom_io_logger')
 
-
-    self.logger.info('intializing dicom processor')
+    self.processing_queue    = queue.Queue()
+    threading.Thread(target = self.worker, daemon = True).start()
 
     self.last_dcm_storage_dir = None
     self.last_dcm_fname       = None
@@ -231,7 +229,7 @@ class DicomListener:
             # submit new processing job to the processing queue
             self.processing_queue.put((process_dir, self.last_peer_address))
             self.logger.info(f'adding to process queue {process_dir}')
-            self.logger.info(f'current queue size {self.processing_queue.qsize()}')
+            self.logger.info(f'current queue {list(self.processing_queue.queue)}')
 
           except:
             self.logger.error('submitting processing to queue failed')  
@@ -244,23 +242,27 @@ class DicomListener:
 
   def worker(self):
     while True:
-      process_dir, peer_address = self.processing_queue.get()
-      process_logger = setup_logger(process_dir.with_suffix('.log'), name = process_dir.name)
-
       try:
-        process_logger.info(f'Working on {process_dir}')
-        dummy_seg(process_dir, peer_address, self.sending_port, process_logger)
+        self.logger.info(f'current queue {list(self.processing_queue.queue)}')
+        process_dir, peer_address = self.processing_queue.get(timeout = self.timeout)
+        process_logger = setup_logger(process_dir.with_suffix('.log'), name = process_dir.name)
 
-        if self.cleanup_process_dir:
-          shutil.rmtree(process_dir)
-          process_logger.info(f'removed {process_dir}')
+        try:
+          process_logger.info(f'Working on {process_dir}')
+          dummy_seg(process_dir, peer_address, self.sending_port, process_logger)
 
-        process_logger.info(f'Finished {process_dir}')
-      except:
-        process_logger.error('worker job failed')
+          if self.cleanup_process_dir:
+            shutil.rmtree(process_dir)
+            process_logger.info(f'removed {process_dir}')
 
-      del process_logger
-      self.processing_queue.task_done()
+          process_logger.info(f'Finished {process_dir}')
+        except:
+          process_logger.error('worker job failed')
+
+        del process_logger
+        self.processing_queue.task_done()
+      except queue.Empty:
+        pass
 
 #------------------------------------------------------------------------------------------------
 
