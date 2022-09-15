@@ -1,7 +1,8 @@
 import numpy as np
 import numpy.typing as npt
 
-from utils import LinearOperator, Norm
+from operators import LinearOperator
+from norms import Norm
 
 
 class PDHG:
