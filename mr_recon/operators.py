@@ -216,8 +216,9 @@ class MultiChannel3DCartesianMRAcquisitionModel(LinearOperator):
 
         for i in range(self._num_channels):
             y[i, ...] = real_view_of_complex_array(
-                self._coil_sensitivites_complex[i, ...] *
-                np.fft.fftn(x_complex, norm='ortho'))
+                np.fft.fftn(self._coil_sensitivites_complex[i, ...] *
+                            x_complex,
+                            norm='ortho'))
 
         return y
 
@@ -239,9 +240,8 @@ class MultiChannel3DCartesianMRAcquisitionModel(LinearOperator):
 
         for i in range(self._num_channels):
             x += real_view_of_complex_array(
-                np.fft.ifftn(np.conj(self._coil_sensitivites_complex[i, ...]) *
-                             y_complex[i, ...],
-                             norm='ortho'))
+                np.conj(self._coil_sensitivites_complex[i, ...]) *
+                np.fft.ifftn(y_complex[i, ...], norm='ortho'))
 
         return x
 

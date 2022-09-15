@@ -32,8 +32,9 @@ np.random.seed(seed)
 ph = rod_phantom(n=n)
 x_true = np.stack([ph, np.zeros_like(ph)], axis=-1)
 
-# setup coil sensitivities
+# setup "perfect" coil sensitivities - this is not realistic and should be improved
 sens = np.ones((num_channels, n, n, n, 2))
+sens[..., 1] = 0
 
 # setup the data model
 data_operator = MultiChannel3DCartesianMRAcquisitionModel(
@@ -83,14 +84,19 @@ if num_iter > 0:
     # show the results
 
     ims = dict(cmap=plt.cm.Greys_r, vmin=0, vmax=1.2 * x_true.max())
+    ims_back = dict(cmap=plt.cm.Greys_r, vmin=0)
 
-    fig, ax = plt.subplots(2, 3, figsize=(9, 6))
+    fig, ax = plt.subplots(3, 3, figsize=(8, 8))
     ax[0, 0].imshow(x_true[..., n // 2, 0], **ims)
     ax[0, 1].imshow(x_true[..., n // 2, 1], **ims)
     ax[0, 2].imshow(np.linalg.norm(x_true, axis=-1)[..., n // 2], **ims)
-    ax[1, 0].imshow(reconstructor.x[..., n // 2, 0], **ims)
-    ax[1, 1].imshow(reconstructor.x[..., n // 2, 1], **ims)
+    ax[1, 0].imshow(data_back[..., n // 2, 0], **ims_back)
+    ax[1, 1].imshow(data_back[..., n // 2, 1], **ims_back)
     ax[1,
+       2].imshow(np.linalg.norm(data_back, axis=-1)[..., n // 2], **ims_back)
+    ax[2, 0].imshow(reconstructor.x[..., n // 2, 0], **ims)
+    ax[2, 1].imshow(reconstructor.x[..., n // 2, 1], **ims)
+    ax[2,
        2].imshow(np.linalg.norm(reconstructor.x, axis=-1)[..., n // 2], **ims)
     fig.tight_layout()
     fig.show()
