@@ -13,14 +13,14 @@ import matplotlib.pyplot as plt
 
 n: int = 64
 num_channels: int = 4
-noise_level: float = 0.3
+noise_level: float = 1.
 seed: int = 0
 
-num_iter: int = 20
+num_iter: int = 200
 
 data_norm = L2NormSquared()
 prior_norm = ComplexL1L2Norm()
-beta: float = 1e1
+beta: float = 1e0
 
 #----------------------------------------------------------------------------------------
 np.random.seed(seed)
@@ -47,10 +47,24 @@ noisy_data = noise_free_data + noise_level * x_true.mean() * np.random.randn(
 prior_operator = ComplexGradientOperator(n, 3)
 
 #----------------------------------------------------------------------------------------
+# power iterations to estimate the norm of the complete operator
+rimg = np.random.rand(*data_operator.x_shape)
+for i in range(20):
+    fwd1 = data_operator.forward(rimg)
+    fwd2 = prior_operator.forward(rimg)
+
+    rimg = data_operator.adjoint(fwd1) + prior_operator.adjoint(fwd2)
+    pnsq = np.linalg.norm(rimg)
+    rimg /= pnsq
+
+op_norm = np.sqrt(pnsq)
+print(op_norm)
+
+#----------------------------------------------------------------------------------------
 # run PDHG reconstruction
 
-sigma = 0.2 / prior_operator.norm()
-tau = 0.2 / prior_operator.norm()
+sigma = 0.9 / op_norm
+tau = 0.9 / op_norm
 
 reconstructor = PDHG(noisy_data, data_operator, data_norm, prior_operator,
                      prior_norm, beta, sigma, tau)

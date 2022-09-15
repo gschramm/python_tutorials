@@ -52,36 +52,13 @@ class ComplexL1L2Norm(Norm):
 
         return n
 
-    def prox_convex_dual(self,
-                         x: npt.NDArray,
-                         sigma: float = 1.) -> npt.NDArray:
+    def prox_convex_dual(self, x: npt.NDArray, sigma: float) -> npt.NDArray:
 
         gnorm0 = np.linalg.norm(x[..., 0], axis=0)
         r0 = x[..., 0] / np.clip(gnorm0, 1, None)
 
         gnorm1 = np.linalg.norm(x[..., 1], axis=0)
         r1 = x[..., 1] / np.clip(gnorm1, 1, None)
-
-        return np.stack([r0, r1], axis=-1)
-
-
-class ComplexL2NormSquared(Norm):
-    """norm of a pseudo-complex gradient field - real and imaginary part are treated separately"""
-
-    def __init__(self) -> None:
-        pass
-
-    def __call__(self, x: npt.NDArray) -> float:
-        n = 0.5 * ((x[..., 0]**2).sum() + (x[..., 1]**2).sum())
-
-        return n
-
-    def prox_convex_dual(self,
-                         x: npt.NDArray,
-                         sigma: float = 1.) -> npt.NDArray:
-
-        r0 = x[..., 0] / (1 + sigma)
-        r1 = x[..., 1] / (1 + sigma)
 
         return np.stack([r0, r1], axis=-1)
 
@@ -97,8 +74,6 @@ class L2NormSquared(Norm):
 
         return n
 
-    def prox_convex_dual(self,
-                         x: npt.NDArray,
-                         sigma: float = 1.) -> npt.NDArray:
+    def prox_convex_dual(self, x: npt.NDArray, sigma: float) -> npt.NDArray:
 
         return x / (1 + sigma)
