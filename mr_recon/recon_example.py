@@ -16,7 +16,7 @@ num_channels: int = 4
 noise_level: float = 1.
 seed: int = 0
 
-num_iter: int = 200
+num_iter: int = 0
 
 data_norm = L2NormSquared()
 prior_norm = ComplexL1L2Norm()
@@ -48,40 +48,43 @@ prior_operator = ComplexGradientOperator(n, 3)
 
 #----------------------------------------------------------------------------------------
 # power iterations to estimate the norm of the complete operator
-rimg = np.random.rand(*data_operator.x_shape)
-for i in range(20):
-    fwd1 = data_operator.forward(rimg)
-    fwd2 = prior_operator.forward(rimg)
 
-    rimg = data_operator.adjoint(fwd1) + prior_operator.adjoint(fwd2)
-    pnsq = np.linalg.norm(rimg)
-    rimg /= pnsq
+if num_iter > 0:
+    rimg = np.random.rand(*data_operator.x_shape)
+    for i in range(20):
+        fwd1 = data_operator.forward(rimg)
+        fwd2 = prior_operator.forward(rimg)
 
-op_norm = np.sqrt(pnsq)
-print(op_norm)
+        rimg = data_operator.adjoint(fwd1) + prior_operator.adjoint(fwd2)
+        pnsq = np.linalg.norm(rimg)
+        rimg /= pnsq
 
-#----------------------------------------------------------------------------------------
-# run PDHG reconstruction
+    op_norm = np.sqrt(pnsq)
+    print(op_norm)
 
-sigma = 0.9 / op_norm
-tau = 0.9 / op_norm
+    #----------------------------------------------------------------------------------------
+    # run PDHG reconstruction
 
-reconstructor = PDHG(noisy_data, data_operator, data_norm, prior_operator,
-                     prior_norm, beta, sigma, tau)
+    sigma = 0.9 / op_norm
+    tau = 0.9 / op_norm
 
-reconstructor.run(num_iter, calculate_cost=True)
+    reconstructor = PDHG(noisy_data, data_operator, data_norm, prior_operator,
+                         prior_norm, beta, sigma, tau)
 
-#----------------------------------------------------------------------------------------
-# show the results
+    reconstructor.run(num_iter, calculate_cost=True)
 
-ims = dict(cmap=plt.cm.Greys_r, vmin=0, vmax=1.2 * x_true.max())
+    #----------------------------------------------------------------------------------------
+    # show the results
 
-fig, ax = plt.subplots(2, 3, figsize=(9, 6))
-ax[0, 0].imshow(x_true[..., n // 2, 0], **ims)
-ax[0, 1].imshow(x_true[..., n // 2, 1], **ims)
-ax[0, 2].imshow(np.linalg.norm(x_true, axis=-1)[..., n // 2], **ims)
-ax[1, 0].imshow(reconstructor.x[..., n // 2, 0], **ims)
-ax[1, 1].imshow(reconstructor.x[..., n // 2, 1], **ims)
-ax[1, 2].imshow(np.linalg.norm(reconstructor.x, axis=-1)[..., n // 2], **ims)
-fig.tight_layout()
-fig.show()
+    ims = dict(cmap=plt.cm.Greys_r, vmin=0, vmax=1.2 * x_true.max())
+
+    fig, ax = plt.subplots(2, 3, figsize=(9, 6))
+    ax[0, 0].imshow(x_true[..., n // 2, 0], **ims)
+    ax[0, 1].imshow(x_true[..., n // 2, 1], **ims)
+    ax[0, 2].imshow(np.linalg.norm(x_true, axis=-1)[..., n // 2], **ims)
+    ax[1, 0].imshow(reconstructor.x[..., n // 2, 0], **ims)
+    ax[1, 1].imshow(reconstructor.x[..., n // 2, 1], **ims)
+    ax[1,
+       2].imshow(np.linalg.norm(reconstructor.x, axis=-1)[..., n // 2], **ims)
+    fig.tight_layout()
+    fig.show()
