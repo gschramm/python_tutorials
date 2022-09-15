@@ -46,6 +46,18 @@ class PDHG:
     def y_prior(self) -> npt.NDArray:
         return self._y_prior
 
+    @property
+    def cost_data(self) -> npt.NDArray:
+        return np.array(self._cost_data)
+
+    @property
+    def cost_prior(self) -> npt.NDArray:
+        return np.array(self._cost_prior)
+
+    @property
+    def cost(self) -> npt.NDArray:
+        return self.cost_data + self.cost_prior
+
     def initialize(self) -> None:
         self._x = np.zeros(self._data_operator.x_shape)
         self._xbar = np.zeros(self._data_operator.x_shape)
@@ -54,7 +66,8 @@ class PDHG:
         self._y_prior = np.zeros(self._prior_operator.y_shape)
 
         self._iteration_number = 0
-        self._cost = []
+        self._cost_data = []
+        self._cost_prior = []
 
     def update(self) -> None:
         # data forward step
@@ -92,7 +105,8 @@ class PDHG:
             if verbose:
                 print(f'iteration {self._iteration_number}')
             if calculate_cost:
-                self._cost.append(
-                    self._data_norm(self._data_operator.forward(self._x)) +
+                self._cost_data.append(
+                    self._data_norm(self._data_operator.forward(self._x) - self._data))
+                self._cost_prior.append(
                     self._beta *
                     self._prior_norm(self._prior_operator.forward(self._x)))

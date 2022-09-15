@@ -1,7 +1,6 @@
 # TODO: - SOS recon
 
 import numpy as np
-import numpy.typing as npt
 
 from phantoms import rod_phantom
 from operators import MultiChannel3DCartesianMRAcquisitionModel, ComplexGradientOperator
@@ -13,16 +12,18 @@ import matplotlib.pyplot as plt
 #----------------------------------------------------------------------------------------
 # input parameters
 
-n: int = 64
+n: int = 128
 num_channels: int = 4
 noise_level: float = 1.
 seed: int = 0
 
-num_iter: int = 0
+num_iter: int = 50
 
 data_norm = L2NormSquared()
 prior_norm = ComplexL1L2Norm()
-beta: float = 1e0
+beta: float = 0.5
+#prior_norm = L2NormSquared()
+#beta: float = 5.
 
 #----------------------------------------------------------------------------------------
 np.random.seed(seed)
@@ -82,9 +83,8 @@ if num_iter > 0:
 
     #----------------------------------------------------------------------------------------
     # show the results
-
     ims = dict(cmap=plt.cm.Greys_r, vmin=0, vmax=1.2 * x_true.max())
-    ims_back = dict(cmap=plt.cm.Greys_r, vmin=0)
+    ims_back = dict(cmap=plt.cm.Greys_r, vmin=0, vmax=1.2 * data_back.max())
 
     fig, ax = plt.subplots(3, 3, figsize=(8, 8))
     ax[0, 0].imshow(x_true[..., n // 2, 0], **ims)
@@ -98,5 +98,35 @@ if num_iter > 0:
     ax[2, 1].imshow(reconstructor.x[..., n // 2, 1], **ims)
     ax[2,
        2].imshow(np.linalg.norm(reconstructor.x, axis=-1)[..., n // 2], **ims)
+
+    ax[0, 0].set_ylabel('ground truth')
+    ax[1, 0].set_ylabel('adjoint(data)')
+    ax[2, 0].set_ylabel('iterative w prior')
+
+    ax[0, 0].set_title('real part')
+    ax[0, 1].set_title('imag part')
+    ax[0, 2].set_title('magnitude')
+
     fig.tight_layout()
     fig.show()
+
+    # show the total, data and prior cost
+    iter = np.arange(1, reconstructor.cost.shape[0] + 1)
+    fig2, ax2 = plt.subplots(2, 3, figsize=(9, 6), sharex='row')
+    ax2[0, 0].plot(iter, reconstructor.cost)
+    ax2[0, 1].plot(iter, reconstructor.cost_data)
+    ax2[0, 2].plot(iter, reconstructor.cost_prior)
+    ax2[1, 0].plot(iter[-10:], reconstructor.cost[-10:])
+    ax2[1, 1].plot(iter[-10:], reconstructor.cost_data[-10:])
+    ax2[1, 2].plot(iter[-10:], reconstructor.cost_prior[-10:])
+    ax2[0, 0].set_title('total cost')
+    ax2[0, 1].set_title('data cost')
+    ax2[0, 2].set_title('prior cost')
+    for axx in ax2.ravel():
+        axx.grid(ls=':')
+    for axx in ax2[-1, :]:
+        axx.set_xlabel('iteration')
+    fig2.tight_layout()
+    fig2.show()
+
+    plt.show()
