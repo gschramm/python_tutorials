@@ -41,7 +41,7 @@ class Norm(abc.ABC):
 
 
 class ComplexL1L2Norm(Norm):
-    """norm of a pseudo-complex gradient field - real and imaginary part are treated separately"""
+    """mixed L1-L2 norm of a pseudo-complex gradient field - real and imaginary part are treated separately"""
 
     def __init__(self) -> None:
         pass

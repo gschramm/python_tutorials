@@ -6,6 +6,8 @@ from norms import Norm
 
 
 class PDHG:
+    """generic primal-dual hybrid gradient algorithm (Chambolle-Pock) for optimizing
+       data_norm(data_operator x) + beta*(prior_norm(prior_operator x))"""
 
     def __init__(self,
                  data: npt.NDArray,
@@ -17,6 +19,28 @@ class PDHG:
                  sigma: float,
                  tau: float,
                  theta: float = 0.999) -> None:
+        """
+        Parameters
+        ----------
+        data : npt.NDArray
+            array containing that data
+        data_operator : LinearOperator
+            operator mapping current image to expected data
+        data_norm : Norm
+            norm applied to (expected data - data)
+        prior_operator : LinearOperator
+            prior operator
+        prior_norm : Norm
+            prior norm
+        beta : float
+            weight of prior
+        sigma : float
+            primal step size 
+        tau : float
+            dual step size 
+        theta : float, optional
+            theta parameter, by default 0.999
+        """
 
         self._data = data
 
@@ -106,7 +130,8 @@ class PDHG:
                 print(f'iteration {self._iteration_number}')
             if calculate_cost:
                 self._cost_data.append(
-                    self._data_norm(self._data_operator.forward(self._x) - self._data))
+                    self._data_norm(
+                        self._data_operator.forward(self._x) - self._data))
                 self._cost_prior.append(
                     self._beta *
                     self._prior_norm(self._prior_operator.forward(self._x)))
