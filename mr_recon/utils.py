@@ -303,40 +303,7 @@ class ComplexGradientOperator(LinearOperator):
 class Norm(abc.ABC):
     """abstract base clase for norms where we can calculate the prox of the convex dual"""
 
-    def __init__(self, name: str) -> None:
-        self._name = name
-
-    @property
-    def name(self) -> str:
-        return self._name
-
     @abc.abstractmethod
-    def __call__(self, x: npt.NDArray) -> float:
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def prox_convex_dual(self, x: npt.NDArray) -> npt.NDArray:
-        raise NotImplementedError
-
-
-class ComplexGradientNorm(Norm):
-    """norm of a pseudo-complex gradient field - real and imaginary part are treated separately"""
-
-    def __init__(self, name: str = 'l2_l1') -> None:
-        """
-        Parameters
-        ----------
-
-        name : str
-          name of the norm
-          'l2_l1' ... mixed L2/L1 (sum of pointwise Euclidean norms in every voxel)
-          'l2_sq' ... squared l2 norm (sum of pointwise squared Euclidean norms in every voxel)
-        """
-        super().__init__(name)
-
-        if not self._name in ['l2_l1', 'l2_sq']:
-            raise NotImplementedError
-
     def __call__(self, x: npt.NDArray) -> float:
         """
         Parameters
@@ -349,17 +316,10 @@ class ComplexGradientNorm(Norm):
         float
             the complex gradient norm
         """
-        if self._name == 'l2_l1':
-            n = np.linalg.norm(x[..., 0], axis=0).sum() + np.linalg.norm(
-                x[..., 1], axis=0).sum()
-        elif self._name == 'l2_sq':
-            n = (x[..., 0]**2).sum() + (x[..., 1]**2).sum()
+        raise NotImplementedError
 
-        return n
-
-    def prox_convex_dual(self,
-                         x: npt.NDArray,
-                         sigma: float = 1.) -> npt.NDArray:
+    @abc.abstractmethod
+    def prox_convex_dual(self, x: npt.NDArray, sigma: float) -> npt.NDArray:
         """proximal operator of the convex dual of the norm
 
         Parameters
@@ -374,26 +334,68 @@ class ComplexGradientNorm(Norm):
         npt.NDArray
             the proximity operator of the convex dual of the norm applied on x
         """
-        if self._name == 'l2_l1':
-            gnorm0 = np.linalg.norm(x[..., 0], axis=0)
-            r0 = x[..., 0] / np.clip(gnorm0, 1, None)
+        raise NotImplementedError
 
-            gnorm1 = np.linalg.norm(x[..., 1], axis=0)
-            r1 = x[..., 1] / np.clip(gnorm1, 1, None)
 
-        elif self._name == 'l2_sq':
-            r0 = x[..., 0] / (1 + sigma)
-            r1 = x[..., 1] / (1 + sigma)
+class ComplexL1L2Norm(Norm):
+    """norm of a pseudo-complex gradient field - real and imaginary part are treated separately"""
+
+    def __init__(self) -> None:
+        pass
+
+    def __call__(self, x: npt.NDArray) -> float:
+        n = np.linalg.norm(x[..., 0], axis=0).sum() + np.linalg.norm(
+            x[..., 1], axis=0).sum()
+
+        return n
+
+    def prox_convex_dual(self,
+                         x: npt.NDArray,
+                         sigma: float = 1.) -> npt.NDArray:
+
+        gnorm0 = np.linalg.norm(x[..., 0], axis=0)
+        r0 = x[..., 0] / np.clip(gnorm0, 1, None)
+
+        gnorm1 = np.linalg.norm(x[..., 1], axis=0)
+        r1 = x[..., 1] / np.clip(gnorm1, 1, None)
 
         return np.stack([r0, r1], axis=-1)
 
 
-if __name__ == '__main__':
-    np.random.seed(1)
-    n = 64
-    num_channels = 4
-    coil_sens = np.random.rand(num_channels, n, n, n, 2)
-    mop = MultiChannel3DCartesianMRAcquisitionModel(n, num_channels, coil_sens)
-    mop.adjointness_test()
+class ComplexL2NormSquared(Norm):
+    """norm of a pseudo-complex gradient field - real and imaginary part are treated separately"""
 
-    gop = ComplexGradientOperator(n, 3)
+    def __init__(self) -> None:
+        pass
+
+    def __call__(self, x: npt.NDArray) -> float:
+        n = 0.5 * ((x[..., 0]**2).sum() + (x[..., 1]**2).sum())
+
+        return n
+
+    def prox_convex_dual(self,
+                         x: npt.NDArray,
+                         sigma: float = 1.) -> npt.NDArray:
+
+        r0 = x[..., 0] / (1 + sigma)
+        r1 = x[..., 1] / (1 + sigma)
+
+        return np.stack([r0, r1], axis=-1)
+
+
+class L2NormSquared(Norm):
+    """squared L2 norm"""
+
+    def __init__(self) -> None:
+        pass
+
+    def __call__(self, x: npt.NDArray) -> float:
+        n = 0.5 * (x**2).sum()
+
+        return n
+
+    def prox_convex_dual(self,
+                         x: npt.NDArray,
+                         sigma: float = 1.) -> npt.NDArray:
+
+        return x / (1 + sigma)
