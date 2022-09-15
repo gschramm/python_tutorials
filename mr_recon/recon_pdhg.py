@@ -1,3 +1,5 @@
+# TODO: - SOS recon
+
 import numpy as np
 import numpy.typing as npt
 
@@ -43,14 +45,18 @@ noise_free_data = data_operator.forward(x_true)
 noisy_data = noise_free_data + noise_level * x_true.mean() * np.random.randn(
     *data_operator.x_shape)
 
+# apply the adjoint of the data operator to the data
+data_back = data_operator.adjoint(noisy_data)
+
 # setup the prior operator
 prior_operator = ComplexGradientOperator(n, 3)
 
 #----------------------------------------------------------------------------------------
-# power iterations to estimate the norm of the complete operator
+# power iterations to estimate the norm of the complete operator (data + prior)
+# for PDHG you should make sure that the norms of the individual operators are more or less the same
 
+rimg = np.random.rand(*data_operator.x_shape)
 if num_iter > 0:
-    rimg = np.random.rand(*data_operator.x_shape)
     for i in range(20):
         fwd1 = data_operator.forward(rimg)
         fwd2 = prior_operator.forward(rimg)
