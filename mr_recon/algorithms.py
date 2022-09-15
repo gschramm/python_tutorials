@@ -1,8 +1,8 @@
 import numpy as np
 import numpy.typing as npt
 
-from operators import LinearOperator
-from norms import Norm
+from operators import LinearOperator, complex_view_of_real_array
+from functionals import Norm
 
 
 class PDHG:
@@ -135,3 +135,17 @@ class PDHG:
                 self._cost_prior.append(
                     self._beta *
                     self._prior_norm(self._prior_operator.forward(self._x)))
+
+
+def sum_of_squares_reconstruction(data: npt.NDArray) -> npt.NDArray:
+
+    data_complex = complex_view_of_real_array(data)
+    recon_complex = np.zeros_like(data_complex)
+
+    for i in range(data.shape[0]):
+        recon_complex[i, ...] = np.fft.ifftn(data_complex[i, ...],
+                                             norm='ortho')
+
+    recon = np.sqrt((np.abs(recon_complex)**2).sum(axis=0))
+
+    return recon
