@@ -16,7 +16,7 @@ class PDHG:
                  beta: float,
                  sigma: float,
                  tau: float,
-                 theta: float = 1.) -> None:
+                 theta: float = 0.999) -> None:
 
         self._data = data
 
@@ -58,18 +58,20 @@ class PDHG:
 
     def update(self) -> None:
         # data forward step
-        self._y_data += self._sigma * (
-            self._data_operator.forward(self._xbar) - self._data)
+        self._y_data = self._y_data + (
+            self._sigma *
+            (self._data_operator.forward(self._xbar) - self._data))
 
         # prox of data fidelity
         self._y_data = self._data_norm.prox_convex_dual(self._y_data,
                                                         sigma=self._sigma)
 
         # prior operator forward step
-        self._y_prior += self._sigma * self._prior_operator.forward(self._xbar)
+        self._y_prior = self._y_prior + (
+            self._sigma * self._prior_operator.forward(self._xbar))
         # prox of prior norm
         self._y_prior = self._beta * self._prior_norm.prox_convex_dual(
-            self._y_data / self._beta, sigma=self._sigma / self._beta)
+            self._y_prior / self._beta, sigma=self._sigma / self._beta)
 
         x_plus = self._x - self._tau * self._data_operator.adjoint(
             self._y_data) - self._tau * self._prior_operator.adjoint(
