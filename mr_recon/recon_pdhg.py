@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 #----------------------------------------------------------------------------------------
 # input parameters
 
-n: int = 128
+n: int = 64
 num_channels: int = 4
 noise_level: float = 1.
 seed: int = 0
@@ -20,10 +20,11 @@ seed: int = 0
 num_iter: int = 50
 
 data_norm = L2NormSquared()
-prior_norm = ComplexL1L2Norm()
-beta: float = 0.5
-#prior_norm = L2NormSquared()
-#beta: float = 5.
+
+#prior_norm = ComplexL1L2Norm()
+#beta: float = 0.5
+prior_norm = L2NormSquared()
+beta: float = 5.
 
 #----------------------------------------------------------------------------------------
 np.random.seed(seed)
@@ -58,75 +59,72 @@ prior_operator = ComplexGradientOperator(n, 3)
 # for PDHG you should make sure that the norms of the individual operators are more or less the same
 
 rimg = np.random.rand(*data_operator.x_shape)
-if num_iter > 0:
-    for i in range(20):
-        fwd1 = data_operator.forward(rimg)
-        fwd2 = prior_operator.forward(rimg)
+for i in range(20):
+    fwd1 = data_operator.forward(rimg)
+    fwd2 = prior_operator.forward(rimg)
 
-        rimg = data_operator.adjoint(fwd1) + prior_operator.adjoint(fwd2)
-        pnsq = np.linalg.norm(rimg)
-        rimg /= pnsq
+    rimg = data_operator.adjoint(fwd1) + prior_operator.adjoint(fwd2)
+    pnsq = np.linalg.norm(rimg)
+    rimg /= pnsq
 
-    op_norm = np.sqrt(pnsq)
-    print(op_norm)
+op_norm = np.sqrt(pnsq)
+print(op_norm)
 
-    #----------------------------------------------------------------------------------------
-    # run PDHG reconstruction
+#----------------------------------------------------------------------------------------
+# run PDHG reconstruction
 
-    sigma = 0.9 / op_norm
-    tau = 0.9 / op_norm
+sigma = 0.9 / op_norm
+tau = 0.9 / op_norm
 
-    reconstructor = PDHG(noisy_data, data_operator, data_norm, prior_operator,
-                         prior_norm, beta, sigma, tau)
+reconstructor = PDHG(noisy_data, data_operator, data_norm, prior_operator,
+                     prior_norm, beta, sigma, tau)
 
-    reconstructor.run(num_iter, calculate_cost=True)
+reconstructor.run(num_iter, calculate_cost=True)
 
-    #----------------------------------------------------------------------------------------
-    # show the results
-    ims = dict(cmap=plt.cm.Greys_r, vmin=0, vmax=1.2 * x_true.max())
-    ims_back = dict(cmap=plt.cm.Greys_r, vmin=0, vmax=1.2 * data_back.max())
+#----------------------------------------------------------------------------------------
+# show the results
+ims = dict(cmap=plt.cm.Greys_r, vmin=0, vmax=1.2 * x_true.max())
+ims_back = dict(cmap=plt.cm.Greys_r, vmin=0, vmax=1.2 * data_back.max())
 
-    fig, ax = plt.subplots(3, 3, figsize=(8, 8))
-    ax[0, 0].imshow(x_true[..., n // 2, 0], **ims)
-    ax[0, 1].imshow(x_true[..., n // 2, 1], **ims)
-    ax[0, 2].imshow(np.linalg.norm(x_true, axis=-1)[..., n // 2], **ims)
-    ax[1, 0].imshow(data_back[..., n // 2, 0], **ims_back)
-    ax[1, 1].imshow(data_back[..., n // 2, 1], **ims_back)
-    ax[1,
-       2].imshow(np.linalg.norm(data_back, axis=-1)[..., n // 2], **ims_back)
-    ax[2, 0].imshow(reconstructor.x[..., n // 2, 0], **ims)
-    ax[2, 1].imshow(reconstructor.x[..., n // 2, 1], **ims)
-    ax[2,
-       2].imshow(np.linalg.norm(reconstructor.x, axis=-1)[..., n // 2], **ims)
+fig, ax = plt.subplots(3, 3, figsize=(8, 8))
+ax[0, 0].imshow(x_true[..., n // 2, 0], **ims)
+ax[0, 1].imshow(x_true[..., n // 2, 1], **ims)
+ax[0, 2].imshow(np.linalg.norm(x_true, axis=-1)[..., n // 2], **ims)
+ax[1, 0].imshow(data_back[..., n // 2, 0], **ims_back)
+ax[1, 1].imshow(data_back[..., n // 2, 1], **ims_back)
+ax[1, 2].imshow(np.linalg.norm(data_back, axis=-1)[..., n // 2], **ims_back)
+ax[2, 0].imshow(reconstructor.x[..., n // 2, 0], **ims)
+ax[2, 1].imshow(reconstructor.x[..., n // 2, 1], **ims)
+ax[2, 2].imshow(np.linalg.norm(reconstructor.x, axis=-1)[..., n // 2], **ims)
 
-    ax[0, 0].set_ylabel('ground truth')
-    ax[1, 0].set_ylabel('adjoint(data)')
-    ax[2, 0].set_ylabel('iterative w prior')
+ax[0, 0].set_ylabel('ground truth')
+ax[1, 0].set_ylabel('adjoint(data)')
+ax[2, 0].set_ylabel('iterative w prior')
 
-    ax[0, 0].set_title('real part')
-    ax[0, 1].set_title('imag part')
-    ax[0, 2].set_title('magnitude')
+ax[0, 0].set_title('real part')
+ax[0, 1].set_title('imag part')
+ax[0, 2].set_title('magnitude')
 
-    fig.tight_layout()
-    fig.show()
+fig.tight_layout()
+fig.show()
 
-    # show the total, data and prior cost
-    iter = np.arange(1, reconstructor.cost.shape[0] + 1)
-    fig2, ax2 = plt.subplots(2, 3, figsize=(9, 6), sharex='row')
-    ax2[0, 0].plot(iter, reconstructor.cost)
-    ax2[0, 1].plot(iter, reconstructor.cost_data)
-    ax2[0, 2].plot(iter, reconstructor.cost_prior)
-    ax2[1, 0].plot(iter[-10:], reconstructor.cost[-10:])
-    ax2[1, 1].plot(iter[-10:], reconstructor.cost_data[-10:])
-    ax2[1, 2].plot(iter[-10:], reconstructor.cost_prior[-10:])
-    ax2[0, 0].set_title('total cost')
-    ax2[0, 1].set_title('data cost')
-    ax2[0, 2].set_title('prior cost')
-    for axx in ax2.ravel():
-        axx.grid(ls=':')
-    for axx in ax2[-1, :]:
-        axx.set_xlabel('iteration')
-    fig2.tight_layout()
-    fig2.show()
+# show the total, data and prior cost
+iter = np.arange(1, reconstructor.cost.shape[0] + 1)
+fig2, ax2 = plt.subplots(2, 3, figsize=(9, 6), sharex='row')
+ax2[0, 0].plot(iter, reconstructor.cost)
+ax2[0, 1].plot(iter, reconstructor.cost_data)
+ax2[0, 2].plot(iter, reconstructor.cost_prior)
+ax2[1, 0].plot(iter[-10:], reconstructor.cost[-10:])
+ax2[1, 1].plot(iter[-10:], reconstructor.cost_data[-10:])
+ax2[1, 2].plot(iter[-10:], reconstructor.cost_prior[-10:])
+ax2[0, 0].set_title('total cost')
+ax2[0, 1].set_title('data cost')
+ax2[0, 2].set_title('prior cost')
+for axx in ax2.ravel():
+    axx.grid(ls=':')
+for axx in ax2[-1, :]:
+    axx.set_xlabel('iteration')
+fig2.tight_layout()
+fig2.show()
 
-    plt.show()
+plt.show()

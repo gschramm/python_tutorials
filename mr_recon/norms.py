@@ -40,6 +40,26 @@ class Norm(abc.ABC):
         raise NotImplementedError
 
 
+class SmoothNorm(Norm):
+    """smooth norm with gradient method"""
+
+    @abc.abstractmethod
+    def gradient(self, x: npt.NDArray) -> npt.NDArray:
+        """gradient of norm
+
+        Parameters
+        ----------
+        x : npt.NDArray
+            input to norm
+
+        Returns
+        -------
+        npt.NDArray
+            the gradient
+        """        
+        raise NotImplementedError
+
+
 class ComplexL1L2Norm(Norm):
     """mixed L1-L2 norm of a pseudo-complex gradient field - real and imaginary part are treated separately"""
 
@@ -63,7 +83,7 @@ class ComplexL1L2Norm(Norm):
         return np.stack([r0, r1], axis=-1)
 
 
-class L2NormSquared(Norm):
+class L2NormSquared(SmoothNorm):
     """squared L2 norm"""
 
     def __init__(self) -> None:
@@ -77,3 +97,7 @@ class L2NormSquared(Norm):
     def prox_convex_dual(self, x: npt.NDArray, sigma: float) -> npt.NDArray:
 
         return x / (1 + sigma)
+
+    def gradient(self, x: npt.NDArray) -> npt.NDArray:
+
+        return x
