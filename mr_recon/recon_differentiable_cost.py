@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import fmin_l_bfgs_b, fmin_cg
 
-from phantoms import rod_phantom
+from phantoms import rod_phantom, generate_sensitivities
 from operators import MultiChannel3DCartesianMRAcquisitionModel, ComplexGradientOperator
 from functionals import TotalCost, L2NormSquared
 from algorithms import sum_of_squares_reconstruction
@@ -21,7 +21,7 @@ num_iter: int = 50
 data_norm = L2NormSquared()
 
 prior_norm = L2NormSquared()
-beta: float = 5.
+beta: float = 1.
 
 #----------------------------------------------------------------------------------------
 np.random.seed(seed)
@@ -31,9 +31,8 @@ np.random.seed(seed)
 ph = rod_phantom(n=n)
 x_true = np.stack([ph, np.zeros_like(ph)], axis=-1)
 
-# setup "perfect" coil sensitivities - this is not realistic and should be improved
-sens = np.ones((num_channels, n, n, n, 2))
-sens[..., 1] = 0
+# setup "known" coil sensitivities - in real life they have to estimated from the data
+sens = generate_sensitivities(n, num_channels)
 
 # setup the data model
 data_operator = MultiChannel3DCartesianMRAcquisitionModel(
@@ -112,7 +111,7 @@ ax[3, 1].imshow(recon_lbfgs[..., n // 2, 0], **ims)
 ax[3, 2].imshow(recon_lbfgs[..., n // 2, 1], **ims)
 
 ax[0, 0].set_ylabel('ground truth')
-ax[1, 0].set_ylabel('adjoint(data)')
+ax[1, 0].set_ylabel('sum of squares')
 ax[2, 0].set_ylabel('iterative w prior CG')
 ax[3, 0].set_ylabel('iterative w prior LBFGS')
 

@@ -1,6 +1,8 @@
 import numpy as np
 import numpy.typing as npt
 
+from scipy.ndimage import gaussian_filter
+
 
 def rod_phantom(n: int = 256,
                 r: float = 0.9,
@@ -56,3 +58,34 @@ def rod_phantom(n: int = 256,
     x[:, :, ((7 * n) // 8):] = 0
 
     return x
+
+
+def generate_sensitivities(n: int, num_channels: int):
+    x = np.linspace(-1, 1, n)
+    X, Y = np.meshgrid(x, x, indexing='ij')
+
+    phis = np.linspace(0, 2 * np.pi, num=num_channels, endpoint=False)
+
+    s = np.zeros((num_channels, n, n))
+
+    for i, phi in enumerate(phis):
+        x0 = 1.5 * np.cos(phi)
+        y0 = 1.5 * np.sin(phi)
+
+        R = np.sqrt((X - x0)**2 + (Y - y0)**2)
+        s[i, ...] = 1 / R**2
+
+    # repeat 2D arrays into 3D array
+    s = np.repeat(s[:, :, :, np.newaxis], n, axis=3)
+
+    sens = np.zeros((num_channels, n, n, n, 2))
+    # generate random phase
+    for i, phi in enumerate(phis):
+        phase = gaussian_filter(np.random.rand(n, n, n)[:, :, n // 2], n / 6)
+        phase -= phase.min()
+        phase *= (2 * np.pi / phase.max())
+
+        sens[i, ..., 0] = s[i, ...] * np.cos(phi)
+        sens[i, ..., 1] = s[i, ...] * np.sin(phi)
+
+    return sens

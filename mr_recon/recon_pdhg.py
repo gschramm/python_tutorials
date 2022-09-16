@@ -1,7 +1,7 @@
 """example script on how to do MR recon with non-smooth prior using PDHG"""
 import numpy as np
 
-from phantoms import rod_phantom
+from phantoms import rod_phantom, generate_sensitivities
 from operators import MultiChannel3DCartesianMRAcquisitionModel, ComplexGradientOperator
 from functionals import L2NormSquared, ComplexL1L2Norm
 from algorithms import PDHG, sum_of_squares_reconstruction
@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 #----------------------------------------------------------------------------------------
 # input parameters
 
-n: int = 128
+n: int = 64
 num_channels: int = 4
 noise_level: float = 1.
 seed: int = 0
@@ -21,9 +21,9 @@ num_iter: int = 50
 data_norm = L2NormSquared()
 
 prior_norm = ComplexL1L2Norm()
-beta: float = 0.5
+beta: float = 0.1
 #prior_norm = L2NormSquared()
-#beta: float = 5.
+#beta: float = 2.
 
 #----------------------------------------------------------------------------------------
 np.random.seed(seed)
@@ -33,9 +33,8 @@ np.random.seed(seed)
 ph = rod_phantom(n=n)
 x_true = np.stack([ph, np.zeros_like(ph)], axis=-1)
 
-# setup "perfect" coil sensitivities - this is not realistic and should be improved
-sens = np.ones((num_channels, n, n, n, 2))
-sens[..., 1] = 0
+# setup "known" coil sensitivities - in real life they have to estimated from the data
+sens = generate_sensitivities(n, num_channels)
 
 # setup the data model
 data_operator = MultiChannel3DCartesianMRAcquisitionModel(
