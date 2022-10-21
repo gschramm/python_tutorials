@@ -144,6 +144,26 @@ class MatrixLinearOperator(LinearOperator):
         return self._A.T @ y
 
 
+class IdentityOperator(LinearOperator):
+    """Identity operator"""
+
+    def __init__(self, shape: tuple[int, ...]) -> None:
+        """Identity operator
+
+        Parameters
+        ----------
+        shape : tuple[int, ...]
+            shape of the array where Identity operates on
+        """
+        super().__init__(shape, shape)
+
+    def forward(self, x: npt.NDArray) -> npt.NDArray:
+        return x
+
+    def adjoint(self, y: npt.NDArray) -> npt.NDArray:
+        return y
+
+
 class MultiChannel3DCartesianMRAcquisitionModel(LinearOperator):
     """acquisition model for multi channel MR with cartesian sampling"""
 

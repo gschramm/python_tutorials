@@ -18,7 +18,8 @@ class PDHG:
                  beta: float,
                  sigma: float,
                  tau: float,
-                 theta: float = 0.999) -> None:
+                 theta: float = 0.999,
+                 prior_image: float | npt.NDArray = 0.) -> None:
         """
         Parameters
         ----------
@@ -40,6 +41,9 @@ class PDHG:
             dual step size 
         theta : float, optional
             theta parameter, by default 0.999
+        prior_image : float | npt.NDArray, optional
+            the image subtracted from the (prior_operator image) before applying the
+            prior norm, by default 0.
         """
 
         self._data = data
@@ -55,6 +59,8 @@ class PDHG:
         self._sigma = sigma
         self._tau = tau
         self._theta = theta
+
+        self._prior_image = prior_image
 
         self.initialize()
 
@@ -105,7 +111,8 @@ class PDHG:
 
         # prior operator forward step
         self._y_prior = self._y_prior + (
-            self._sigma * self._prior_operator.forward(self._xbar))
+            self._sigma *
+            (self._prior_operator.forward(self._xbar) - self._prior_image))
         # prox of prior norm
         self._y_prior = self._beta * self._prior_norm.prox_convex_dual(
             self._y_prior / self._beta, sigma=self._sigma / self._beta)
@@ -134,7 +141,7 @@ class PDHG:
                         self._data_operator.forward(self._x) - self._data))
                 self._cost_prior.append(
                     self._beta *
-                    self._prior_norm(self._prior_operator.forward(self._x)))
+                    self._prior_norm(self._prior_operator.forward(self._x) - self._prior_image))
 
 
 def sum_of_squares_reconstruction(data: npt.NDArray) -> npt.NDArray:
