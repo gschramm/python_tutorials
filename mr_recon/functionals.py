@@ -108,9 +108,14 @@ class L2NormSquared(SmoothNorm):
 class TotalCost:
     """ total (smooth) cost consisting of data fidelity and prior"""
 
-    def __init__(self, data: npt.NDArray, data_operator: LinearOperator,
-                 data_norm: SmoothNorm, prior_operator: LinearOperator,
-                 prior_norm: SmoothNorm, beta: float) -> None:
+    def __init__(self,
+                 data: npt.NDArray,
+                 data_operator: LinearOperator,
+                 data_norm: SmoothNorm,
+                 prior_operator: LinearOperator,
+                 prior_norm: SmoothNorm,
+                 beta: float,
+                 prior_image: float | npt.NDArray = 0.) -> None:
 
         self._data = data
 
@@ -119,6 +124,7 @@ class TotalCost:
 
         self._prior_operator = prior_operator
         self._prior_norm = prior_norm
+        self._prior_image = prior_image
 
         self._beta = beta
 
@@ -129,7 +135,8 @@ class TotalCost:
 
         cost = self._data_norm(self._data_operator.forward(x) -
                                self._data) + self._beta * self._prior_norm(
-                                   self._prior_operator.forward(x))
+                                   self._prior_operator.forward(x) -
+                                   self._prior_image)
 
         x = x.reshape(input_shape)
 
@@ -144,7 +151,8 @@ class TotalCost:
             self._data_norm.gradient(
                 self._data_operator.forward(x) - self._data))
         prior_grad = self._beta * self._prior_operator.adjoint(
-            self._prior_norm.gradient(self._prior_operator.forward(x)))
+            self._prior_norm.gradient(self._prior_operator.forward(x)) -
+            self._prior_image)
 
         x = x.reshape(input_shape)
 
