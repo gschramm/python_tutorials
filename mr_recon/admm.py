@@ -13,6 +13,7 @@ import numpy.typing as npt
 import matplotlib.pyplot as plt
 
 from scipy.optimize import fmin_cg, minimize
+from scipy.ndimage import gaussian_filter
 
 
 class LinearOperator:
@@ -37,14 +38,15 @@ class LinearOperator:
 
 class SmoothFunction:
 
-    def __init__(self, y: npt.NDArray) -> None:
+    def __init__(self, y: npt.NDArray, A: LinearOperator) -> None:
         self._y = y
+        self._A = A
 
     def __call__(self, x: npt.NDArray) -> float:
-        return 0.5 * np.sum((x - self._y)**2)
+        return 0.5 * np.sum((self._A(x) - self._y)**2)
 
     def gradient(self, x: npt.NDArray) -> npt.NDArray:
-        return x - self._y
+        return self._A.adjoint(self._A(x) - self._y)
 
 
 class QuadMapFunction:
@@ -80,8 +82,14 @@ class L1Norm:
 if __name__ == '__main__':
     np.random.seed(1)
     n = 10
-    y = 50 * np.random.rand(n)
-    func = SmoothFunction(y)
+    K = gaussian_filter(5 * np.random.rand(2 * n, n), (0, 0.8))
+    dataOp = LinearOperator(K)
+
+    x_true = np.random.rand(n)
+    y = dataOp(x_true)
+    y += 0.1 * y.mean() * np.random.randn(y.shape[0])
+
+    func = SmoothFunction(y, dataOp)
 
     A = np.zeros((n - 1, n))
     for i in range(n - 1):
@@ -92,7 +100,7 @@ if __name__ == '__main__':
 
     prior = L1Norm()
 
-    niter = 100
+    niter = 300
 
     # initialize variables
     x0 = np.zeros(gradOp.in_shape)
@@ -101,9 +109,9 @@ if __name__ == '__main__':
 
     # calculate reference solution via other optimizer
     total_func = lambda x: func(x) + prior(gradOp(x))
-    ref = minimize(total_func, x0)
+    ref = minimize(total_func, x0, tol=1e-7)
 
-    rhos = [1e-3, 1e-2, 1e-1, 1e0, 1e1]
+    rhos = (1e-2, 1e-1, 1e0, 1e1, 1e2, 1e3)
     cost = np.zeros((len(rhos), niter))
     x_admm = np.zeros((len(rhos), n))
 
@@ -135,11 +143,11 @@ if __name__ == '__main__':
         ax[0].plot(np.arange(1, niter + 1),
                    cost[irho, ...],
                    label=f'rho = {rho}')
-        ax[1].loglog(np.arange(1, niter + 1),
-                     cost[irho, ...],
-                     label=f'rho = {rho}')
-    ax[0].legend()
-    ax[0].set_ylim(0.999 * ref.fun, 1.05 * ref.fun)
+        ax[1].semilogy(np.arange(1, niter + 1),
+                       cost[irho, ...],
+                       label=f'rho = {rho}')
+    ax[0].legend(ncol=2)
+    ax[0].set_ylim(0.975 * ref.fun, 1.05 * ref.fun)
     ax[0].axhline(ref.fun, lw=0.5, color='k')
     ax[0].grid(ls=':')
     ax[1].grid(ls=':')
