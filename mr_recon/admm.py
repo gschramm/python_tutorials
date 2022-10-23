@@ -88,29 +88,32 @@ if __name__ == '__main__':
         A[i, i] = -1
         A[i, i + 1] = 1
 
-    linOp = LinearOperator(A)
+    gradOp = LinearOperator(A)
 
     prior = L1Norm()
 
-    niter = 30
+    niter = 100
 
     # initialize variables
-    x = np.zeros(linOp.in_shape)
-    z = np.zeros(linOp.out_shape)
-    u = np.zeros(linOp.out_shape)
+    x0 = np.zeros(gradOp.in_shape)
+    z0 = np.zeros(gradOp.out_shape)
+    u0 = np.zeros(gradOp.out_shape)
 
     # calculate reference solution via other optimizer
-    total_func = lambda x: func(x) + prior(linOp(x))
-    ref = minimize(total_func, x)
+    total_func = lambda x: func(x) + prior(gradOp(x))
+    ref = minimize(total_func, x0)
 
-    rhos = [1e-2, 1e-1, 1e0, 1e1, 1e2]
+    rhos = [1e-3, 1e-2, 1e-1, 1e0, 1e1]
     cost = np.zeros((len(rhos), niter))
     x_admm = np.zeros((len(rhos), n))
 
     for irho, rho in enumerate(rhos):
+        x = x0.copy()
+        z = z0.copy()
+        u = u0.copy()
         for it in range(niter):
             # solve ADMM subproblem (1) to update x
-            func_quad = QuadMapFunction(func, rho, linOp)
+            func_quad = QuadMapFunction(func, rho, gradOp)
             f = lambda x: func_quad(x, z - u)
             g = lambda x: func_quad.gradient(x, z - u)
 
@@ -118,10 +121,10 @@ if __name__ == '__main__':
             x = fmin_cg(f, x0, g)
 
             # solve ADMM subproblem (2) to update z
-            z = prior.prox(linOp(x) + u, 1. / rho)
+            z = prior.prox(gradOp(x) + u, 1. / rho)
 
             # update the dual variable
-            u = u + (linOp(x) - z)
+            u = u + (gradOp(x) - z)
 
             cost[irho, it] = total_func(x)
 
