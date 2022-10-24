@@ -1,11 +1,12 @@
-"""demo script to understand ADMM on a small scale example
+"""demo script to understand ADMM on a small scale example,
+   especially the influence of the rho parameter
 
    here we want to solve the problem
    argmin_x f(x) + g(Kx)
 
-   with f(x) = 0.5||x - y||_2^2
+   with f(x) = 0.5||Ax - y||_2^2
         g(.) = ||.||_1
-   and  K a random maxtrix operator
+   and  K a gradient like operator
 """
 
 import numpy as np
