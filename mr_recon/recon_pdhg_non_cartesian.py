@@ -132,7 +132,7 @@ ax[2, 1].imshow(reconstructor.x[..., n // 2, 0], **ims)
 ax[2, 2].imshow(reconstructor.x[..., n // 2, 1], **ims)
 
 ax[0, 0].set_ylabel('ground truth')
-ax[1, 0].set_ylabel('adjoint(corrected data)')
+ax[1, 0].set_ylabel('adjoint(density corr. data)')
 ax[2, 0].set_ylabel('iterative w prior')
 
 ax[0, 0].set_title('magnitude')

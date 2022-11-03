@@ -271,9 +271,14 @@ class MultiChannel3DCartesianMRAcquisitionModel(LinearOperator):
 class MultiChannel3DNonCartesianMRAcquisitionModel(LinearOperator):
     """acquisition model for multi channel MR with non cartesian sampling using pynufft"""
 
-    def __init__(self, n: int, num_channels: int,
-                 coil_sensitivities: npt.NDArray,
-                 kspace_sample_points: npt.NDArray) -> None:
+    def __init__(
+        self,
+        n: int,
+        num_channels: int,
+        coil_sensitivities: npt.NDArray,
+        kspace_sample_points: npt.NDArray,
+        interpolation_size: tuple[int, int, int] = (6, 6, 6)
+    ) -> None:
         """
         Parameters
         ----------
@@ -288,6 +293,8 @@ class MultiChannel3DNonCartesianMRAcquisitionModel(LinearOperator):
         kspace_sample_points : npt.NDArray
             coordinates of the k-space sample points of shape (num_kspace_samples, 3)
             the kspace coodinate should be within [-pi,pi]
+        interpolation_size: tuple(int,int,int), optional
+            interpolation size for nufft, default (6,6,6)
         """
         super().__init__((n, n, n, 2),
                          (num_channels, kspace_sample_points.shape[0], 2))
@@ -297,6 +304,7 @@ class MultiChannel3DNonCartesianMRAcquisitionModel(LinearOperator):
         self._coil_sensitivites_complex = complex_view_of_real_array(
             coil_sensitivities)
 
+        # case where kspace point but not nufft object is given
         self._kspace_sample_points = kspace_sample_points
 
         # size of the oversampled kspace grid
@@ -304,9 +312,11 @@ class MultiChannel3DNonCartesianMRAcquisitionModel(LinearOperator):
         # the adjoint from pynufft needs to be scaled by this factor
         self._adjoint_scaling_factor = np.prod(self._Kd)
 
+        self._interpolation_size = interpolation_size
+
         self._nufft = pynufft.NUFFT(pynufft.helper.device_list()[0])
         self._nufft.plan(self.kspace_sample_points, (n, n, n), self._Kd,
-                         (6, 6, 6))
+                         self._interpolation_size)
 
     @property
     def n(self) -> int:
