@@ -271,14 +271,13 @@ class MultiChannel3DCartesianMRAcquisitionModel(LinearOperator):
 class MultiChannel3DNonCartesianMRAcquisitionModel(LinearOperator):
     """acquisition model for multi channel MR with non cartesian sampling using pynufft"""
 
-    def __init__(
-        self,
-        n: int,
-        num_channels: int,
-        coil_sensitivities: npt.NDArray,
-        kspace_sample_points: npt.NDArray,
-        interpolation_size: tuple[int, int, int] = (6, 6, 6)
-    ) -> None:
+    def __init__(self,
+                 n: int,
+                 num_channels: int,
+                 coil_sensitivities: npt.NDArray,
+                 kspace_sample_points: npt.NDArray,
+                 interpolation_size: tuple[int, int, int] = (6, 6, 6),
+                 device_number=0) -> None:
         """
         Parameters
         ----------
@@ -295,6 +294,8 @@ class MultiChannel3DNonCartesianMRAcquisitionModel(LinearOperator):
             the kspace coodinate should be within [-pi,pi]
         interpolation_size: tuple(int,int,int), optional
             interpolation size for nufft, default (6,6,6)
+        device_number: int, optional
+            device from pynuffts device list to use, default 0
         """
         super().__init__((n, n, n, 2),
                          (num_channels, kspace_sample_points.shape[0], 2))
@@ -314,7 +315,10 @@ class MultiChannel3DNonCartesianMRAcquisitionModel(LinearOperator):
 
         self._interpolation_size = interpolation_size
 
-        self._nufft = pynufft.NUFFT(pynufft.helper.device_list()[0])
+        self._device_number = device_number
+        self._device = pynufft.helper.device_list()[self._device_number]
+
+        self._nufft = pynufft.NUFFT(self._device)
         self._nufft.plan(self.kspace_sample_points, (n, n, n), self._Kd,
                          self._interpolation_size)
 
