@@ -11,13 +11,13 @@ import matplotlib.pyplot as plt
 #----------------------------------------------------------------------------------------
 # input parameters
 
-n: int = 64
-n2: int = 8
+n: int = 256
+n2: int = 1
 num_channels: int = 1
 noise_level: float = 0.
 seed: int = 0
 
-num_spokes: int = int(0.1 * n2 * n * n)
+num_spokes: int = int(0.5 * n2 * n)
 num_samples_per_spoke: int = 128  # this must be an even number
 
 num_iter: int = 500
@@ -25,7 +25,7 @@ num_iter: int = 500
 data_norm = L2NormSquared()
 
 prior_norm = ComplexL1L2Norm()
-beta: float = 0
+beta: float = 1e-5
 
 #----------------------------------------------------------------------------------------
 np.random.seed(seed)
@@ -33,8 +33,6 @@ np.random.seed(seed)
 # setup ground truth image and simulate data
 # ground truth image
 ph = np.swapaxes(rod_phantom(n=n)[:, :, (n // 2):(n // 2 + n2)], 0, 2)
-ph[:2, ...] = 0
-ph[-2:, ...] = 0
 x_true = np.stack([ph, np.zeros_like(ph)], axis=-1)
 
 # setup "known" coil sensitivities - in real life they have to estimated from the data
