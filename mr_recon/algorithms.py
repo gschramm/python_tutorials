@@ -110,16 +110,19 @@ class PDHG:
                                                         sigma=self._sigma)
 
         # prior operator forward step
-        self._y_prior = self._y_prior + (
-            self._sigma *
-            (self._prior_operator.forward(self._xbar) - self._prior_image))
-        # prox of prior norm
-        self._y_prior = self._beta * self._prior_norm.prox_convex_dual(
-            self._y_prior / self._beta, sigma=self._sigma / self._beta)
+        if self._beta > 0:
+            self._y_prior = self._y_prior + (
+                self._sigma *
+                (self._prior_operator.forward(self._xbar) - self._prior_image))
+            # prox of prior norm
+            self._y_prior = self._beta * self._prior_norm.prox_convex_dual(
+                self._y_prior / self._beta, sigma=self._sigma / self._beta)
 
         x_plus = self._x - self._tau * self._data_operator.adjoint(
-            self._y_data) - self._tau * self._prior_operator.adjoint(
-                self._y_prior)
+            self._y_data)
+
+        if self._beta > 0:
+            x_plus -= self._tau * self._prior_operator.adjoint(self._y_prior)
 
         self._xbar = x_plus + self._theta * (x_plus - self._x)
 
@@ -139,9 +142,8 @@ class PDHG:
                 self._cost_data.append(
                     self._data_norm(
                         self._data_operator.forward(self._x) - self._data))
-                self._cost_prior.append(
-                    self._beta *
-                    self._prior_norm(self._prior_operator.forward(self._x) - self._prior_image))
+                self._cost_prior.append(self._beta * self._prior_norm(
+                    self._prior_operator.forward(self._x) - self._prior_image))
 
 
 def sum_of_squares_reconstruction(data: npt.NDArray) -> npt.NDArray:

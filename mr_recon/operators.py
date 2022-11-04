@@ -268,6 +268,187 @@ class MultiChannel3DCartesianMRAcquisitionModel(LinearOperator):
         return x
 
 
+class MultiChannel3DNonCartesianStackedMRAcquisitionModel(LinearOperator):
+    """acquisition model for multi channel MR with non cartesian stacked sampling using pynufft"""
+
+    def __init__(self,
+                 x_shape: tuple[int, int, int],
+                 num_channels: int,
+                 coil_sensitivities: npt.NDArray,
+                 kspace_sample_points: npt.NDArray,
+                 stack_numbers: npt.NDArray,
+                 interpolation_size: tuple[int, int, int] = (6, 6),
+                 device_number=0) -> None:
+        """
+        Parameters
+        ----------
+        x_shape : tuple
+            shape of the image array - e.g. (32,256,256) -> 32 slices -> 32 stacks
+        num_channels : int
+            number of channels (coils)
+        coil_sensitivities : npt.NDArray
+            the (pseudo-complex) coil sensitivities, shape (num_channels,n,n,n,2)
+        kspace_sample_points : npt.NDArray
+            2D coordinates of the k-space sample points of all stacks of shape (num_kspace_samples, 2)
+            the kspace coodinates should be within [-pi,pi]
+        stack_numbers : npt.NDArray
+            a 1D uint array of length kspace_sample_points.shape[0] indicating which to which stack every
+            kspace points belongs
+        interpolation_size: tuple(int,int,int), optional
+            interpolation size for nufft, default (6,6)
+        device_number: int, optional
+            device from pynuffts device list to use, default 0
+        """
+        super().__init__(x_shape + (2, ),
+                         (num_channels, kspace_sample_points.shape[0], 2))
+
+        self._num_channels = num_channels
+        self._coil_sensitivites_complex = complex_view_of_real_array(
+            coil_sensitivities)
+
+        # case where kspace point but not nufft object is given
+        self._kspace_sample_points = kspace_sample_points
+
+        self._stack_numbers = stack_numbers
+
+        # size of the oversampled kspace grid
+        self._Kd = (2 * x_shape[1], 2 * x_shape[2])
+        # the adjoint from pynufft needs to be scaled by this factor
+        self._adjoint_scaling_factor = np.prod(self._Kd)
+
+        self._interpolation_size = interpolation_size
+
+        self._device_number = device_number
+        self._device = pynufft.helper.device_list()[self._device_number]
+
+        # setup a nufft object for every stack
+        self._nuffts = []
+        self._kspace_inds = []
+
+        for i in range(x_shape[0]):
+            inds = np.where(self.stack_numbers == i)[0]
+            nufft = pynufft.NUFFT(self._device)
+            nufft.plan(self.kspace_sample_points[inds, :],
+                       (x_shape[1], x_shape[2]), self._Kd,
+                       self._interpolation_size)
+            self._nuffts.append(nufft)
+            self._kspace_inds.append(inds)
+
+    @property
+    def num_channels(self) -> int:
+        """
+        Returns
+        -------
+        int
+            number of channels (coils)
+        """
+        return self._num_channels
+
+    @property
+    def coil_sensivities(self) -> npt.NDArray:
+        """
+        Returns
+        -------
+        npt.NDArray
+            (pseud-complex) array of coil sensitivities
+        """
+        return real_view_of_complex_array(self._coil_sensitivites_complex)
+
+    @property
+    def kspace_sample_points(self) -> npt.NDArray:
+        """
+        Returns
+        -------
+        npt.NDArray
+            coordinates of the k-space sample points
+        """
+        return self._kspace_sample_points
+
+    @property
+    def stack_numbers(self) -> npt.NDArray:
+        """
+        Returns
+        -------
+        npt.NDArray
+            stack number of every kspace sample point
+        """
+        return self._stack_numbers
+
+    def forward(self, x: npt.NDArray) -> npt.NDArray:
+        """forward method
+
+        Parameters
+        ----------
+        x : npt.NDArray
+            (pseudo-complex) image with shape (n,n,n,2)
+
+        Returns
+        -------
+        npt.NDArray
+            (pseudo-complex) data y with shape (num_channels,num_kspace_points,2)
+        """
+        x_complex = complex_view_of_real_array(x)
+        y = np.zeros(self._y_shape, dtype=x.dtype)
+
+        for i in range(self._num_channels):
+            for j in range(self.x_shape[0]):
+                y[i, self._kspace_inds[j], :] = real_view_of_complex_array(
+                    self._nuffts[j].forward(
+                        self._coil_sensitivites_complex[i, j, :, :] *
+                        x_complex[j, :, :]))
+
+        return y
+
+    def adjoint(self, y: npt.NDArray) -> npt.NDArray:
+        """adjoint of forward method
+
+        Parameters
+        ----------
+        y : npt.NDArray
+            (pseudo-complex) data with shape (num_channels,num_kspace_points,2)
+
+        Returns
+        -------
+        npt.NDArray
+            (pseudo-complex) image x with shape (n,n,n,2)
+        """
+        y_complex = complex_view_of_real_array(y)
+        x = np.zeros(self._x_shape, dtype=y.dtype)
+
+        for i in range(self._num_channels):
+            for j in range(self.x_shape[0]):
+                x[j, :, :] += real_view_of_complex_array(
+                    np.conj(self._coil_sensitivites_complex[i, j, :, :]) *
+                    self._nuffts[j].adjoint(y_complex[i, self._kspace_inds[j]])
+                    * self._adjoint_scaling_factor)
+
+        return x
+
+    def show_kspace_sample_points(self, stack, **kwargs) -> plt.figure:
+        """show kspace sample points in a 3D scatter plot
+
+        Parameters
+        ----------
+
+        kwargs: dict
+            keyword arguments passed to plt.scatter()
+
+        Returns
+        -------
+        plt.figure
+            figure containing the scatter plot
+        """
+        fig, ax = plt.subplots(1, 1, figsize=(7, 7))
+        ax.scatter(self.kspace_sample_points[self._kspace_inds[stack], 0],
+                   self.kspace_sample_points[self._kspace_inds[stack], 1],
+                   marker='.',
+                   **kwargs)
+        fig.tight_layout()
+        fig.show()
+
+        return fig
+
+
 class MultiChannel3DNonCartesianMRAcquisitionModel(LinearOperator):
     """acquisition model for multi channel MR with non cartesian sampling using pynufft"""
 
@@ -284,7 +465,7 @@ class MultiChannel3DNonCartesianMRAcquisitionModel(LinearOperator):
         n : int
             spatial dimension
             the (pseudo-complex) image x has shape (n,n,n,2)
-            the (pseudo-complex) data y has shape (num_channels,n,n,n,2)
+            the (pseudo-complex) data y has shape (num_channels,num_kspace_points,2)
         num_channels : int
             number of channels (coils)
         coil_sensitivities : npt.NDArray
@@ -373,7 +554,7 @@ class MultiChannel3DNonCartesianMRAcquisitionModel(LinearOperator):
         Returns
         -------
         npt.NDArray
-            (pseudo-complex) data y with shape (num_channels,n,n,n,2)
+            (pseudo-complex) data y with shape (num_channels,num_kspace_points,2)
         """
         x_complex = complex_view_of_real_array(x)
         y = np.zeros(self._y_shape, dtype=x.dtype)
@@ -391,7 +572,7 @@ class MultiChannel3DNonCartesianMRAcquisitionModel(LinearOperator):
         Parameters
         ----------
         y : npt.NDArray
-            (pseudo-complex) data with shape (num_channels,n,n,n,2)
+            (pseudo-complex) data with shape (num_channels,num_kspace_points,2)
 
         Returns
         -------
@@ -439,24 +620,29 @@ class MultiChannel3DNonCartesianMRAcquisitionModel(LinearOperator):
 class ComplexGradientOperator(LinearOperator):
     """finite forward difference gradient operator for pseudo complex arrays (2 real arrays)"""
 
-    def __init__(self, n: int, ndim: int) -> None:
+    def __init__(self, n: int | tuple[int, int, int], ndim: int) -> None:
         """
         Parameters
         ----------
-        n : int
-            spatial dimension
+        n : int | tuple[int,int,int]
+            spatial shape
+            if an integer is given, the shape is (n,n,n)
         ndim : int
             number of dimensions
-            the image x has the dimension ndim(n,) + (2,)
-            the gradient image y has the dimension (ndim,) + ndim(n,) + (2,)
+            the image x has the dimension (n0,n1,n2) + (2,)
+            the gradient image y has the dimension (ndim,) + (n0,n1,n2) + (2,)
         """
         self._ndim = ndim
         self._sl_first = slice(0, 1, None)
         self._sl_last = slice(-1, None, None)
         self._sl_all = slice(None, None, None)
 
-        super().__init__(self._ndim * (n, ) + (2, ),
-                         (self._ndim, ) + self._ndim * (n, ) + (2, ))
+        if isinstance(n, int):
+            x_shape = self._ndim * (n, )
+        else:
+            x_shape = n
+
+        super().__init__(x_shape + (2, ), (self._ndim, ) + x_shape + (2, ))
 
     @property
     def ndim(self) -> int:
