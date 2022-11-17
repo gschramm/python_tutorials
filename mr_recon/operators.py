@@ -268,51 +268,63 @@ class MultiChannel3DCartesianMRAcquisitionModel(LinearOperator):
         return x
 
 
-class MultiChannel3DNonCartesianStackedMRAcquisitionModel(LinearOperator):
+class MultiChannel3DStackOfStarsMRAcquisitionModel(LinearOperator):
     """acquisition model for multi channel MR with non cartesian stacked sampling using pynufft"""
 
     def __init__(self,
                  x_shape: tuple[int, int, int],
-                 num_channels: int,
                  coil_sensitivities: npt.NDArray,
-                 kspace_sample_points: npt.NDArray,
-                 stack_numbers: npt.NDArray,
-                 interpolation_size: tuple[int, int, int] = (6, 6),
+                 spoke_angles: npt.NDArray,
+                 num_samples_per_spoke: int,
+                 interpolation_size: tuple[int, int, int] = (6, 6, 6),
                  device_number=0) -> None:
         """
-        Parameters
-        ----------
-        x_shape : tuple
-            shape of the image array - e.g. (32,256,256) -> 32 slices -> 32 stacks
-        num_channels : int
-            number of channels (coils)
+        Parameters 
+ 
+        x_shape : tuple[int, int, int]
+            shape of the input image
         coil_sensitivities : npt.NDArray
-            the (pseudo-complex) coil sensitivities, shape (num_channels,n,n,n,2)
-        kspace_sample_points : npt.NDArray
-            2D coordinates of the k-space sample points of all stacks of shape (num_kspace_samples, 2)
-            the kspace coodinates should be within [-pi,pi]
-        stack_numbers : npt.NDArray
-            a 1D uint array of length kspace_sample_points.shape[0] indicating which to which stack every
-            kspace points belongs
+            the (pseudo-complex) coil sensitivities, shape (num_channels,x_shape,2)
+        spoke_angles : npt.NDArray
+            angles [radians] of the stack of stars
+        spoke_angles : int
+            number of samples along each spoke
         interpolation_size: tuple(int,int,int), optional
             interpolation size for nufft, default (6,6)
         device_number: int, optional
             device from pynuffts device list to use, default 0
         """
-        super().__init__(x_shape + (2, ),
-                         (num_channels, kspace_sample_points.shape[0], 2))
 
-        self._num_channels = num_channels
         self._coil_sensitivites_complex = complex_view_of_real_array(
             coil_sensitivities)
+        self._num_channels = coil_sensitivities.shape[0]
 
-        # case where kspace point but not nufft object is given
-        self._kspace_sample_points = kspace_sample_points
+        self._spoke_angles = spoke_angles
+        self._num_samples_per_spoke = num_samples_per_spoke
 
-        self._stack_numbers = stack_numbers
+        super().__init__(x_shape + (2, ),
+                         (self._num_channels, spoke_angles.shape[0] *
+                          x_shape[0] * num_samples_per_spoke, 2))
+
+        # setup the the kspace sample points
+        self._kspace_sample_points = np.zeros(
+            (self.spoke_angles.shape[0] * self.x_shape[0] *
+             self.num_samples_per_spoke, 3))
+
+        for i, spoke_angle in enumerate(self.spoke_angles):
+            start = i * self.num_samples_per_spoke * self.x_shape[0]
+            end = (i + 1) * self.num_samples_per_spoke * self.x_shape[0]
+            k = np.linspace(-np.pi, np.pi, self.num_samples_per_spoke)
+            self._kspace_sample_points[start:end, 0] = np.repeat(
+                np.linspace(-np.pi, np.pi, self.x_shape[0]),
+                self.num_samples_per_spoke)
+            self._kspace_sample_points[start:end, 1] = np.tile(
+                np.cos(spoke_angle) * k, self.x_shape[0])
+            self._kspace_sample_points[start:end, 2] = np.tile(
+                np.sin(spoke_angle) * k, self.x_shape[0])
 
         # size of the oversampled kspace grid
-        self._Kd = (2 * x_shape[1], 2 * x_shape[2])
+        self._Kd = (2 * x_shape[0], 2 * x_shape[1], 2 * x_shape[2])
         # the adjoint from pynufft needs to be scaled by this factor
         self._adjoint_scaling_factor = np.prod(self._Kd)
 
@@ -322,17 +334,9 @@ class MultiChannel3DNonCartesianStackedMRAcquisitionModel(LinearOperator):
         self._device = pynufft.helper.device_list()[self._device_number]
 
         # setup a nufft object for every stack
-        self._nuffts = []
-        self._kspace_inds = []
-
-        for i in range(x_shape[0]):
-            inds = np.where(self.stack_numbers == i)[0]
-            nufft = pynufft.NUFFT(self._device)
-            nufft.plan(self.kspace_sample_points[inds, :],
-                       (x_shape[1], x_shape[2]), self._Kd,
-                       self._interpolation_size)
-            self._nuffts.append(nufft)
-            self._kspace_inds.append(inds)
+        self._nufft = pynufft.NUFFT(self._device)
+        self._nufft.plan(self.kspace_sample_points, x_shape, self._Kd,
+                         self._interpolation_size)
 
     @property
     def num_channels(self) -> int:
@@ -355,24 +359,34 @@ class MultiChannel3DNonCartesianStackedMRAcquisitionModel(LinearOperator):
         return real_view_of_complex_array(self._coil_sensitivites_complex)
 
     @property
+    def spoke_angles(self) -> npt.NDArray:
+        """
+        Returns
+        -------
+        npt.NDArray
+            spoke angles for the stacked stars
+        """
+        return self._spoke_angles
+
+    @property
+    def num_samples_per_spoke(self) -> int:
+        """
+        Returns
+        -------
+        int
+            number of samples per spoke
+        """
+        return self._num_samples_per_spoke
+
+    @property
     def kspace_sample_points(self) -> npt.NDArray:
         """
         Returns
         -------
         npt.NDArray
-            coordinates of the k-space sample points
+            the kspace sample points
         """
         return self._kspace_sample_points
-
-    @property
-    def stack_numbers(self) -> npt.NDArray:
-        """
-        Returns
-        -------
-        npt.NDArray
-            stack number of every kspace sample point
-        """
-        return self._stack_numbers
 
     def forward(self, x: npt.NDArray) -> npt.NDArray:
         """forward method
@@ -391,11 +405,9 @@ class MultiChannel3DNonCartesianStackedMRAcquisitionModel(LinearOperator):
         y = np.zeros(self._y_shape, dtype=x.dtype)
 
         for i in range(self._num_channels):
-            for j in range(self.x_shape[0]):
-                y[i, self._kspace_inds[j], :] = real_view_of_complex_array(
-                    self._nuffts[j].forward(
-                        self._coil_sensitivites_complex[i, j, :, :] *
-                        x_complex[j, :, :]))
+            y[i, :, :] = real_view_of_complex_array(
+                self._nufft.forward(
+                    self._coil_sensitivites_complex[i, :, :, :] * x_complex))
 
         return y
 
@@ -416,15 +428,14 @@ class MultiChannel3DNonCartesianStackedMRAcquisitionModel(LinearOperator):
         x = np.zeros(self._x_shape, dtype=y.dtype)
 
         for i in range(self._num_channels):
-            for j in range(self.x_shape[0]):
-                x[j, :, :] += real_view_of_complex_array(
-                    np.conj(self._coil_sensitivites_complex[i, j, :, :]) *
-                    self._nuffts[j].adjoint(y_complex[i, self._kspace_inds[j]])
-                    * self._adjoint_scaling_factor)
+            x += real_view_of_complex_array(
+                np.conj(self._coil_sensitivites_complex[i, :, :, :]) *
+                self._nufft.adjoint(y_complex[i, :]) *
+                self._adjoint_scaling_factor)
 
         return x
 
-    def show_kspace_sample_points(self, stack, **kwargs) -> plt.figure:
+    def show_kspace_sample_points(self, **kwargs) -> plt.figure:
         """show kspace sample points in a 3D scatter plot
 
         Parameters
@@ -438,9 +449,11 @@ class MultiChannel3DNonCartesianStackedMRAcquisitionModel(LinearOperator):
         plt.figure
             figure containing the scatter plot
         """
-        fig, ax = plt.subplots(1, 1, figsize=(7, 7))
-        ax.scatter(self.kspace_sample_points[self._kspace_inds[stack], 0],
-                   self.kspace_sample_points[self._kspace_inds[stack], 1],
+        fig = plt.figure()
+        ax = fig.add_subplot(projection='3d')
+        ax.scatter(self.kspace_sample_points[:, 0],
+                   self.kspace_sample_points[:, 1],
+                   self.kspace_sample_points[:, 2],
                    marker='.',
                    **kwargs)
         fig.tight_layout()
