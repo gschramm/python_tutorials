@@ -12,13 +12,13 @@ import matplotlib.pyplot as plt
 # input parameters
 
 n: int = 128
-n2: int = 16
+n2: int = 15
 num_channels: int = 1
 noise_level: float = 0.1
 seed: int = 0
 
 num_spokes: int = 32
-num_samples_per_spoke: int = 2 * n
+num_samples_per_spoke: int = 2 * n - 1
 
 num_iter: int = 200
 
