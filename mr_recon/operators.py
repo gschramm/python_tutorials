@@ -678,12 +678,12 @@ class ComplexGradientOperator(LinearOperator):
 
         for i in range(self._ndim):
             sl = i * (self._sl_all, ) + (
-                self._sl_first, ) + (self._ndim - i - 1) * (self._sl_all, )
-            d[..., 0] -= np.diff(y[i, ..., 0],
-                                 axis=i,
-                                 prepend=y[i, ..., 0][sl])
-            d[..., 1] -= np.diff(y[i, ..., 1],
-                                 axis=i,
-                                 prepend=y[i, ..., 1][sl])
+                self._sl_last, ) + (self._ndim - i - 1) * (self._sl_all, )
+            tmp0 = y[i, ..., 0]
+            tmp0[sl] = 0
+            d[..., 0] -= np.diff(tmp0, axis=i, prepend=0)
+            tmp1 = y[i, ..., 1]
+            tmp1[sl] = 0
+            d[..., 1] -= np.diff(tmp1, axis=i, prepend=0)
 
         return d
