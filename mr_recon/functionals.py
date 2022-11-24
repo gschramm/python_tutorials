@@ -129,24 +129,14 @@ class TotalCost:
         self._beta = beta
 
     def __call__(self, x: npt.NDArray) -> float:
-        input_shape = x.shape
-        # reshaping is necessary since the scipy optimizers only handle 1D arrays
-        x = x.reshape(self._data_operator.x_shape)
-
         cost = self._data_norm(self._data_operator.forward(x) -
                                self._data) + self._beta * self._prior_norm(
                                    self._prior_operator.forward(x) -
                                    self._prior_image)
 
-        x = x.reshape(input_shape)
-
         return cost
 
     def gradient(self, x: npt.NDArray) -> npt.NDArray:
-        input_shape = x.shape
-        # reshaping is necessary since the scipy optimizers only handle 1D arrays
-        x = x.reshape(self._data_operator.x_shape)
-
         data_grad = self._data_operator.adjoint(
             self._data_norm.gradient(
                 self._data_operator.forward(x) - self._data))
@@ -154,6 +144,4 @@ class TotalCost:
             self._prior_norm.gradient(self._prior_operator.forward(x)) -
             self._prior_image)
 
-        x = x.reshape(input_shape)
-
-        return (data_grad + prior_grad).reshape(input_shape)
+        return (data_grad + prior_grad)

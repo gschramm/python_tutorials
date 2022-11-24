@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 # input parameters
 
 n: int = 128
-n2: int = 15
+n2: int = 1
 num_channels: int = 1
 noise_level: float = 0.
 seed: int = 0
@@ -36,15 +36,15 @@ ph = np.swapaxes(rod_phantom(n=n)[:, :, (n // 2):(n // 2 + n2)], 0, 2)
 x_true = np.stack([ph, np.zeros_like(ph)], axis=-1)
 
 # setup "known" coil sensitivities - in real life they have to estimated from the data
-sens = np.ones((num_channels, n2, n, n, 2)) / 100
+sens = np.ones((num_channels, n2, n, n, 2))
 sens[..., 1] = 0
 
 # choose random stack numbers
 
 data_operator = MultiChannel3DStackOfStarsMRAcquisitionModel(
-    x_shape=(n2, n, n),
+    image_shape=(n2, n, n),
     coil_sensitivities=sens,
-    spoke_angles=np.pi * np.random.rand(num_spokes),
+    spoke_angles=np.arange(num_spokes) * 2 * np.pi / (1 + np.sqrt(5)),
     num_samples_per_spoke=num_samples_per_spoke)
 
 # generate noise-free data
@@ -73,12 +73,16 @@ data_back_sampling_corrected = data_operator.adjoint(
 prior_operator = ComplexGradientOperator((n2, n, n), 3)
 
 #----------------------------------------------------------------------------------------
-# run CG recon
 # the total cost function that has __call__(x) and gradient(x)
+
+# for fmin_cg, we have to enable the flat mode for the operators
+data_operator.flat_mode = True
+prior_operator.flat_mode = True
+
 cost = TotalCost(noisy_data, data_operator, data_norm, prior_operator,
                  prior_norm, beta)
 
-# initial recon
+# initial recon, fo
 x0 = np.zeros(data_operator.x_shape).ravel()
 
 # recon using conjugate gradient optimizer
@@ -94,8 +98,15 @@ recon_cg = res_cg[0].reshape(data_operator.x_shape)
 final_cost_cg = res_cg[1]
 
 #----------------------------------------------------------------------------------------
+from operators import complex_view_of_real_array
+
+tmp = data_operator._nufft.solve(data_operator._nufft.forward(x_true),
+                                 'cg',
+                                 maxiter=num_iter)
+
+#----------------------------------------------------------------------------------------
 # show the results
-ims = dict(cmap=plt.cm.Greys_r, vmin=0, vmax=1.3 * np.percentile(x_true, 90))
+ims = dict(cmap=plt.cm.Greys_r, vmin=0, vmax=2. * np.percentile(x_true, 90))
 ims_back = dict(cmap=plt.cm.Greys_r,
                 vmin=0,
                 vmax=1.3 * np.percentile(data_back_sampling_corrected, 99))
