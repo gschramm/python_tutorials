@@ -329,10 +329,9 @@ class MultiChannel3DStackOfStarsMRAcquisitionModel(LinearOperator):
             start = i * self.num_samples_per_spoke * self.x_shape[0]
             end = (i + 1) * self.num_samples_per_spoke * self.x_shape[0]
             k = np.linspace(-np.pi, np.pi, self.num_samples_per_spoke)
-            #self._kspace_sample_points[start:end, 0] = np.repeat(
-            #    np.linspace(-np.pi, np.pi, self.x_shape[0]),
-            #    self.num_samples_per_spoke)
-            self._kspace_sample_points[start:end, 0] = 0
+            self._kspace_sample_points[start:end, 0] = np.repeat(
+                np.linspace(-np.pi, np.pi, self.x_shape[0]),
+                self.num_samples_per_spoke)
             self._kspace_sample_points[start:end, 1] = np.tile(
                 np.cos(spoke_angle) * k, self.x_shape[0])
             self._kspace_sample_points[start:end, 2] = np.tile(

@@ -1,6 +1,7 @@
 """example script on how to do MR recon with non-smooth prior using PDHG"""
 import numpy as np
 from scipy.optimize import fmin_cg
+from scipy.misc import face
 
 from phantoms import rod_phantom
 from operators import MultiChannel3DStackOfStarsMRAcquisitionModel, ComplexGradientOperator
@@ -11,13 +12,13 @@ import matplotlib.pyplot as plt
 #----------------------------------------------------------------------------------------
 # input parameters
 
-n: int = 128
-n2: int = 1
+n: int = 256
+n2: int = 5
 num_channels: int = 1
-noise_level: float = 0.
+noise_level: float = 0.1
 seed: int = 0
 
-num_spokes: int = 10
+num_spokes: int = 16
 num_samples_per_spoke: int = 2 * n - 1
 
 num_iter: int = 200
@@ -30,10 +31,12 @@ beta: float = 0
 #----------------------------------------------------------------------------------------
 np.random.seed(seed)
 
-# setup ground truth image and simulate data
-# ground truth image
-ph = np.swapaxes(rod_phantom(n=n)[:, :, (n // 2):(n // 2 + n2)], 0, 2)
-x_true = np.stack([ph, np.zeros_like(ph)], axis=-1)
+x_true = np.zeros((n2, n, n), dtype=np.float32)
+tmp = face()[-n:, -n:, 0]
+for i in range(n2):
+    x_true[i, :, :, ] = tmp
+
+x_true = np.stack([x_true, np.zeros_like(x_true)], axis=-1)
 
 # setup "known" coil sensitivities - in real life they have to estimated from the data
 sens = np.ones((num_channels, n2, n, n, 2))
