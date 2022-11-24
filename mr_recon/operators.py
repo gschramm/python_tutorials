@@ -247,6 +247,9 @@ class MultiChannel3DCartesianMRAcquisitionModel(LinearOperator):
         npt.NDArray
             (pseudo-complex) data y with shape (num_channels,n,n,n,2)
         """
+        if self.flat_mode:
+            x = x.reshape(self.x_shape)
+
         x_complex = complex_view_of_real_array(x)
         y = np.zeros(self._y_shape, dtype=x.dtype)
 
@@ -279,6 +282,8 @@ class MultiChannel3DCartesianMRAcquisitionModel(LinearOperator):
                 np.conj(self._coil_sensitivites_complex[i, ...]) *
                 np.fft.ifftn(y_complex[i, ...], norm='ortho'))
 
+        if self.flat_mode:
+            x = x.ravel()
         return x
 
 
