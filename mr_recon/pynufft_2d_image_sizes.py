@@ -175,8 +175,8 @@ if __name__ == '__main__':
     # first NUFFT operator that maps from a high res image grid to kspace points
     nufft1 = NUFFTOperator(
         k1,
-        f1.shape,
-        tuple(kspace_oversampling_factor * x for x in f1.shape),
+        high_res_shape,
+        tuple(kspace_oversampling_factor * x for x in high_res_shape),
         interpolation_shape=(interpolation_size, ) * f1.ndim)
     # note: to get the same results as numpy's FFT, we have to fftshift in input to forward
     F1_nu = nufft1.forward(f1)
@@ -189,8 +189,8 @@ if __name__ == '__main__':
 
     nufft2 = NUFFTOperator(
         k2,
-        f2.shape,
-        tuple(kspace_oversampling_factor * x for x in f2.shape),
+        low_res_shape,
+        tuple(kspace_oversampling_factor * x for x in low_res_shape),
         interpolation_shape=(interpolation_size, ) * f2.ndim,
         scale_factor=(np.array(high_res_shape) /
                       np.array(low_res_shape)).prod())
@@ -201,13 +201,13 @@ if __name__ == '__main__':
                                  nufft2,
                                  real_input=True,
                                  flat_input=True,
-                                 image_shape=f2.shape)
+                                 image_shape=low_res_shape)
 
     res = fmin_cg(loss_func,
                   np.zeros(2 * f2.size),
                   fprime=loss_func.gradient,
                   maxiter=1000)
-    res = complex_view_of_real_array(res.reshape(-1, 2)).reshape(f2.shape)
+    res = complex_view_of_real_array(res.reshape(-1, 2)).reshape(low_res_shape)
 
     #-----------------------------------------------------------------------
     # plots
