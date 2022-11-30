@@ -132,7 +132,7 @@ if __name__ == '__main__':
     x2, dx2 = np.linspace(0, 1 / freq, n2, endpoint=False, retstep=True)
     y2, dy2 = np.linspace(0, 1 / freq, n2, endpoint=False, retstep=True)
 
-    # low res true image
+    # lower res true image
     f2 = signal2d(x2, y2, freq)
 
     #-----------------------------------------------------------------------
