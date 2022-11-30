@@ -77,11 +77,11 @@ class DataFidelity:
 
 
 if __name__ == '__main__':
-    n = 256
+    n = 512
     num_iterations = 50
 
     #num_spokes = int(n * np.pi / 2)
-    num_spokes = 10
+    num_spokes = 20
     num_samples_per_spoke = 2 * n
 
     om = np.zeros((num_spokes, num_samples_per_spoke, 2))
