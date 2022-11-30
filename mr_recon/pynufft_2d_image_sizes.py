@@ -3,7 +3,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import fmin_cg
-from scipy.ndimage import gaussian_filter
 
 import pynufft
 
@@ -36,8 +35,11 @@ class NUFFTOperator:
 
         self._adjoint_scaling_factor = np.prod(self._oversampled_fft_shape)
 
-        self._kmask = (np.linalg.norm(self._kspace_coordinates, axis=1) <=
-                       np.pi)
+        self._kmask = np.zeros(self._kspace_coordinates.shape[0],
+                               dtype=np.bool8)
+
+        self._kmask = (np.abs(self._kspace_coordinates) <=
+                       np.pi).prod(1).astype(np.bool8)
 
         self._scale_factor = scale_factor
 
@@ -152,29 +154,29 @@ if __name__ == '__main__':
     # setup the k-space sample points
     if sampling == 'cartesian':
         k = np.linspace(-np.pi, np.pi, high_res_shape[0], endpoint=False)
-        k1 = np.zeros((high_res_shape[0]**2, 2))
-        k1[:, 0] = np.repeat(k, high_res_shape[0])
-        k1[:, 1] = np.tile(k, high_res_shape[0])
+        k_high_res = np.zeros((high_res_shape[0]**2, 2))
+        k_high_res[:, 0] = np.repeat(k, high_res_shape[0])
+        k_high_res[:, 1] = np.tile(k, high_res_shape[0])
     elif sampling == 'radial':
         num_samples_per_spoke = 2 * high_res_shape[0]
-        num_spokes = int(high_res_shape[0] * np.pi / 2) // 4
+        num_spokes = int(high_res_shape[0] * np.pi / 2) // 2
         k = np.linspace(-np.pi, np.pi, num_samples_per_spoke, endpoint=False)
-        k1 = np.zeros((num_spokes * num_samples_per_spoke, 2))
+        k_high_res = np.zeros((num_spokes * num_samples_per_spoke, 2))
 
         phis = np.linspace(-np.pi, np.pi, num_spokes, endpoint=False)
 
         for i, phi in enumerate(phis):
-            k1[i * num_samples_per_spoke:(i + 1) * num_samples_per_spoke,
-               0] = np.cos(phi) * k
-            k1[i * num_samples_per_spoke:(i + 1) * num_samples_per_spoke,
-               1] = np.sin(phi) * k
+            k_high_res[i * num_samples_per_spoke:(i + 1) *
+                       num_samples_per_spoke, 0] = np.cos(phi) * k
+            k_high_res[i * num_samples_per_spoke:(i + 1) *
+                       num_samples_per_spoke, 1] = np.sin(phi) * k
 
     else:
         raise ValueError
 
     # first NUFFT operator that maps from a high res image grid to kspace points
     nufft1 = NUFFTOperator(
-        k1,
+        k_high_res,
         high_res_shape,
         tuple(kspace_oversampling_factor * x for x in high_res_shape),
         interpolation_shape=(interpolation_size, ) * f1.ndim)
@@ -183,12 +185,12 @@ if __name__ == '__main__':
 
     # second NUFFT operator that maps from a lower res image grid to kspace points
     # NOTE: to get correct results, we have to scale the k-space frequencies and introduce a scale factor
-    k2 = k1.copy()
-    for i in range(k2.shape[1]):
-        k2[:, i] *= (high_res_shape[i] / low_res_shape[i])
+    k_low_res = k_high_res.copy()
+    for i in range(k_low_res.shape[1]):
+        k_low_res[:, i] *= (high_res_shape[i] / low_res_shape[i])
 
     nufft2 = NUFFTOperator(
-        k2,
+        k_low_res,
         low_res_shape,
         tuple(kspace_oversampling_factor * x for x in low_res_shape),
         interpolation_shape=(interpolation_size, ) * f2.ndim,
@@ -224,10 +226,25 @@ if __name__ == '__main__':
     ax[1, 0].imshow(res.real, aspect=asp, **ims)
     ax[1, 1].imshow(res.imag, aspect=asp, **ims)
     ax[1, 2].imshow(np.abs(res), aspect=asp, **ims)
+
+    ax[0, 0].set_title('Re(high res ground truth)')
+    ax[0, 1].set_title('Im(high res ground truth)')
+    ax[0, 2].set_title('Abs(high res ground truth)')
+    ax[1, 0].set_title('Re(low res recon)')
+    ax[1, 1].set_title('Im(low res recon)')
+    ax[1, 2].set_title('Abs(low res recon)')
+
     fig.tight_layout()
     fig.show()
 
     fig2, ax2 = plt.subplots(1, 1, figsize=(7, 7))
-    ax2.plot(k1[:, 0], k1[:, 1], '.', ms=1)
+    ax2.plot(k_high_res[:, 0], k_high_res[:, 1], '.', ms=1)
+    ax2.plot(k_high_res[nufft2.kmask, 0],
+             k_high_res[nufft2.kmask, 1],
+             '.',
+             color='r',
+             ms=1)
+    ax2.set_xlabel('k0')
+    ax2.set_ylabel('k1')
     fig2.tight_layout()
     fig2.show()
