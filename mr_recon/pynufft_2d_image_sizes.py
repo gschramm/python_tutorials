@@ -105,26 +105,42 @@ def signal2d(x, y, *args):
 
 
 if __name__ == '__main__':
-    # number of sample points for high res ground truth image
-    n1 = 128
+    # number of sample points for high res image (must be square)
+    high_res_shape = (128, 128)
     # number of sample points for lower res reconstruction
-    n2 = 64
+    low_res_shape = (64, 48)
     kspace_oversampling_factor = 2
     interpolation_size = 6
-    sampling = 'radial'  # cartesian or radial
+    sampling = 'cartesian'  # cartesian or radial
 
     # the frequency of the simulated sine wave
     freq = 1 / (2.5 * np.pi)
 
     # the location of the sampling points in image space
-    x1, dx1 = np.linspace(0, 1 / freq, n1, endpoint=False, retstep=True)
-    y1, dy1 = np.linspace(0, 1 / freq, n1, endpoint=False, retstep=True)
+    x1, dx1 = np.linspace(0,
+                          1 / freq,
+                          high_res_shape[0],
+                          endpoint=False,
+                          retstep=True)
+    y1, dy1 = np.linspace(0,
+                          1 / freq,
+                          high_res_shape[1],
+                          endpoint=False,
+                          retstep=True)
 
     # high res true image
     f1 = signal2d(x1, y1, freq)
 
-    x2, dx2 = np.linspace(0, 1 / freq, n2, endpoint=False, retstep=True)
-    y2, dy2 = np.linspace(0, 1 / freq, n2, endpoint=False, retstep=True)
+    x2, dx2 = np.linspace(0,
+                          1 / freq,
+                          low_res_shape[0],
+                          endpoint=False,
+                          retstep=True)
+    y2, dy2 = np.linspace(0,
+                          1 / freq,
+                          low_res_shape[1],
+                          endpoint=False,
+                          retstep=True)
 
     # lower res true image
     f2 = signal2d(x2, y2, freq)
@@ -135,13 +151,13 @@ if __name__ == '__main__':
 
     # setup the k-space sample points
     if sampling == 'cartesian':
-        k = np.linspace(-np.pi, np.pi, n1, endpoint=False)
-        k1 = np.zeros((n1**2, 2))
-        k1[:, 0] = np.repeat(k, n1)
-        k1[:, 1] = np.tile(k, n1)
+        k = np.linspace(-np.pi, np.pi, high_res_shape[0], endpoint=False)
+        k1 = np.zeros((high_res_shape[0]**2, 2))
+        k1[:, 0] = np.repeat(k, high_res_shape[0])
+        k1[:, 1] = np.tile(k, high_res_shape[0])
     elif sampling == 'radial':
-        num_samples_per_spoke = 2 * n1
-        num_spokes = int(n1 * np.pi / 2) // 4
+        num_samples_per_spoke = 2 * high_res_shape[0]
+        num_spokes = int(high_res_shape[0] * np.pi / 2) // 4
         k = np.linspace(-np.pi, np.pi, num_samples_per_spoke, endpoint=False)
         k1 = np.zeros((num_spokes * num_samples_per_spoke, 2))
 
@@ -165,14 +181,19 @@ if __name__ == '__main__':
     # note: to get the same results as numpy's FFT, we have to fftshift in input to forward
     F1_nu = nufft1.forward(f1)
 
-    # first NUFFT operator that maps from a high res image grid to kspace points
+    # second NUFFT operator that maps from a lower res image grid to kspace points
     # NOTE: to get correct results, we have to scale the k-space frequencies and introduce a scale factor
+    k2 = k1.copy()
+    for i in range(k2.shape[1]):
+        k2[:, i] *= (high_res_shape[i] / low_res_shape[i])
+
     nufft2 = NUFFTOperator(
-        k1 * n1 / n2,
+        k2,
         f2.shape,
         tuple(kspace_oversampling_factor * x for x in f2.shape),
         interpolation_shape=(interpolation_size, ) * f2.ndim,
-        scale_factor=(n1 / n2)**f1.ndim)
+        scale_factor=(np.array(high_res_shape) /
+                      np.array(low_res_shape)).prod())
 
     F2_nu = nufft2.forward(f2)
 
@@ -190,6 +211,7 @@ if __name__ == '__main__':
 
     #-----------------------------------------------------------------------
     # plots
+    asp = low_res_shape[1] / low_res_shape[0]
 
     ims = dict(cmap=plt.cm.Greys_r,
                vmax=1.2 * f1.real.max(),
@@ -199,9 +221,9 @@ if __name__ == '__main__':
     ax[0, 0].imshow(f1.real, **ims)
     ax[0, 1].imshow(f1.imag, **ims)
     ax[0, 2].imshow(np.abs(f1), **ims)
-    ax[1, 0].imshow(res.real, **ims)
-    ax[1, 1].imshow(res.imag, **ims)
-    ax[1, 2].imshow(np.abs(res), **ims)
+    ax[1, 0].imshow(res.real, aspect=asp, **ims)
+    ax[1, 1].imshow(res.imag, aspect=asp, **ims)
+    ax[1, 2].imshow(np.abs(res), aspect=asp, **ims)
     fig.tight_layout()
     fig.show()
 
