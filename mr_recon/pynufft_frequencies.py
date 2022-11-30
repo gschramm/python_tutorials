@@ -63,12 +63,6 @@ class DataFidelityLoss:
         self._flat_input = flat_input
         self._image_shape = image_shape
 
-        ####################
-        ####################
-        # flat input
-        ####################
-        ####################
-
     def _diff(self, x):
         exp = self._operator.forward(x)
         return (exp - self._data) * self._operator.kmask
