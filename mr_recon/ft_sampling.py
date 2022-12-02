@@ -26,6 +26,8 @@ def square(x : npt.NDArray) -> npt.NDArray:
 
     return y
 
+def gauss(x : npt.NDArray, alpha : float) -> npt.NDArray:
+    return np.exp(-alpha*x**2)
 
 if __name__ == '__main__':
 
@@ -40,6 +42,12 @@ if __name__ == '__main__':
     elif shape == 'triangle':
         signal = lambda x: triangle(x)
         ft_signal = lambda k: np.sinc(k/2/np.pi)**2
+    elif shape == 'gauss':
+        a = 35.
+        signal = lambda x: gauss(x, alpha = a)
+        ft_signal = lambda k: np.sqrt(np.pi/a) * np.exp(-(k**2)/(4*a)) 
+    else:
+        raise ValueError
 
     x_high, dx_high = np.linspace(-1,1,n_high, endpoint = False, retstep=True)
     x_low, dx_low = np.linspace(-1,1,n_low, endpoint = False, retstep=True)
@@ -59,6 +67,10 @@ if __name__ == '__main__':
     # note that here we don't include the 1/sqrt(2*pi) factor in the definition of the cont. FT
     F_high_scaled = F_high*(dx_high*np.exp(-1j*k_high*x_high[0]))
     F_low_scaled = F_low*(dx_low*np.exp(-1j*k_low*x_low[0]))
+
+    # inverse Fourier transforms
+    iF_low  = np.fft.ifft(F_low)
+    iF_high =  np.fft.ifft(F_high[np.logical_and(k_high <= k_low.max(), k_high >= k_low.min())])
 
     #---------------------------------------------------------------------
     # plots
@@ -86,8 +98,9 @@ if __name__ == '__main__':
 
     ax[2].set_xlim(k_low.min(),k_low.max())
     ax[3].set_xlim(k_low.min(),-8)
-    tmp = np.abs(ft_signal(k_super_high[k_super_high<=-5])).max()
-    ax[3].set_ylim(-1.01*tmp, 1.01*tmp)
+    tmp_min = ft_signal(k_super_high[k_super_high<=-5]).min()
+    tmp_max = ft_signal(k_super_high[k_super_high<=-5]).max()
+    ax[3].set_ylim(tmp_min, tmp_max)
 
     ax[0].set_xlabel("x")
     ax[0].set_title("signal")
