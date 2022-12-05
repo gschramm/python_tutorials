@@ -11,9 +11,6 @@ def triangle(x : npt.NDArray) -> npt.NDArray:
     y[ipos] = 1 - x[ipos]
     y[ineg] = 1 + x[ineg]
 
-    #y[ipos] = 1
-    #y[ineg] = 1
-
     return y
 
 def square(x : npt.NDArray) -> npt.NDArray:
@@ -55,6 +52,12 @@ if __name__ == '__main__':
     f_high = signal(x_high)
     f_low = signal(x_low)
 
+    #-----------------------------------------------------------------------------------------------------------------
+    #-----------------------------------------------------------------------------------------------------------------
+    # part 1: check how well the DFT of the discretized signal approximates the cont. FT of the cont. signal
+    #-----------------------------------------------------------------------------------------------------------------
+    #-----------------------------------------------------------------------------------------------------------------
+
     F_high = np.fft.fft(f_high)
     F_low = np.fft.fft(f_low)
 
@@ -68,13 +71,29 @@ if __name__ == '__main__':
     F_high_scaled = F_high*(dx_high*np.exp(-1j*k_high*x_high[0]))
     F_low_scaled = F_low*(dx_low*np.exp(-1j*k_low*x_low[0]))
 
-    # inverse Fourier transforms
-    iF_low  = np.fft.ifft(F_low)
-    iF_high =  np.fft.ifft(F_high[np.logical_and(k_high <= k_low.max(), k_high >= k_low.min())])
+    ## inverse Fourier transforms
+    #iF_low  = np.fft.ifft(F_low)
+    #iF_high =  np.fft.ifft(F_high[np.logical_and(k_high <= k_low.max(), k_high >= k_low.min())])
 
-    #---------------------------------------------------------------------
-    # plots
-    ms = 3
+    #-----------------------------------------------------------------------------------------------------------------
+    #-----------------------------------------------------------------------------------------------------------------
+    # part 2: check how inverse DFT of discretely sampled (and truncated) true cont. FT approximates the true signal
+    #-----------------------------------------------------------------------------------------------------------------
+    #-----------------------------------------------------------------------------------------------------------------
+  
+    cont_FT_sampled_high = ft_signal(k_high)
+    cont_FT_sampled_low = ft_signal(k_low)
+
+    f_recon_high = np.fft.ifft(cont_FT_sampled_high / (dx_high*np.exp(-1j*k_high*x_high[0])))
+    f_recon_low = np.fft.ifft(cont_FT_sampled_low / (dx_low*np.exp(-1j*k_low*x_low[0])))
+
+    #-----------------------------------------------------------------------------------------------------------------
+    #-----------------------------------------------------------------------------------------------------------------
+    # Figure 1, visualize how well a DFT of a dicretized signal approximates the continous FT of the continuous signal
+    #-----------------------------------------------------------------------------------------------------------------
+    #-----------------------------------------------------------------------------------------------------------------
+
+    ms = 4
 
     x_super_high = np.linspace(-1,1,2048*16)
     k_super_high = np.linspace(k_high.min(),k_high.max(),2048*16)
@@ -107,11 +126,32 @@ if __name__ == '__main__':
 
     for axx in ax[1:]:
         axx.set_xlabel("k")
-        axx.set_title("Re(FT(signal)")
+
+    ax[1].set_title("Re(FT(signal)")
+    ax[2].set_title("Re(FT(signal) - zoom 1")
+    ax[3].set_title("Re(FT(signal) - zoom 2")
 
     for axx in ax:
         axx.grid(ls = ":")
 
     fig.tight_layout()
     fig.show()
+
+    #-----------------------------------------------------------------------------------------------------------------
+    #-----------------------------------------------------------------------------------------------------------------
+    # Figure 2: check how inverse DFT of samples from the true cont. FT approximates the true signal
+    #-----------------------------------------------------------------------------------------------------------------
+    #-----------------------------------------------------------------------------------------------------------------
+
+    x_super_high = np.linspace(-1, 1, 1000) 
+
+    fig2, ax2 = plt.subplots(figsize = (4,4))
+    ax2.plot(x_super_high, signal(x_super_high), 'k-', lw = 0.5)
+    ax2.plot(x_high, f_recon_high, 'x-', ms = ms, color = plt.cm.tab10(0), lw = 0.5)
+    ax2.plot(x_low, f_recon_low, '.-', ms = ms, color = plt.cm.tab10(1), lw = 0.5)
+    ax2.grid(ls = ":")
+    ax2.set_xlabel("x")
+    ax2.set_title("recon structed signal")
+    fig2.tight_layout()
+    fig2.show()
 
