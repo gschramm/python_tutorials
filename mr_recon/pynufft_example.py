@@ -77,11 +77,11 @@ class DataFidelity:
 
 
 if __name__ == '__main__':
-    n = 512
-    num_iterations = 50
+    n = 1024
+    num_iterations = 100
 
-    #num_spokes = int(n * np.pi / 2)
-    num_spokes = 20
+    num_spokes = int(n * np.pi / 2) // 32
+    #num_spokes = 20
     num_samples_per_spoke = 2 * n
 
     om = np.zeros((num_spokes, num_samples_per_spoke, 2))
@@ -102,14 +102,16 @@ if __name__ == '__main__':
     Jd = (6, 6)  # interpolation size
     print('setting interpolation size Jd...', Jd)
 
-    nufftObj = pynufft.NUFFT()
+    nufftObj = pynufft.NUFFT(pynufft.helper.device_list()[0])
     nufftObj.plan(om, Nd, Kd, Jd)
 
     model = FwdModel(nufftObj, flat_input=True, pseudo_complex_mode=True)
 
     # generate pseudo-complex image
-    x = face()[-n:, -n:, 0].astype(np.float32)
-    x = np.stack([x, np.zeros_like(x)], axis=-1).ravel()
+    x = np.fromfile('xcat_slice_sag.v',
+                    dtype=np.float32).reshape(1024,
+                                              1024)[:n, :n].astype(np.float32)
+    x = np.stack([x, np.zeros_like(x)], axis=-1)
 
     #-----------------------------------------------------
 
@@ -122,27 +124,24 @@ if __name__ == '__main__':
     y_back = model.adjoint(y)
 
     ip_a = (x_fwd * y).sum()
-    ip_b = (x * y_back).sum()
+    ip_b = (x.ravel() * y_back).sum()
 
     print(ip_a, ip_b, ip_a / ip_b)
 
     data_fidelity_loss = DataFidelity(model, x_fwd)
 
-    # cg recon method 1
-    recon_cg = nufftObj.solve(complex_view_of_real_array(x_fwd),
-                              'cg',
-                              maxiter=num_iterations)
+    # cg recon method
+    recon_cg = fmin_cg(data_fidelity_loss,
+                       np.zeros(x.size),
+                       fprime=data_fidelity_loss.gradient,
+                       maxiter=num_iterations)
 
-    # cg recon method 2
-    recon_cg_2 = fmin_cg(data_fidelity_loss,
-                         0 * x,
-                         fprime=data_fidelity_loss.gradient,
-                         maxiter=num_iterations)
+    # reshape the flattened cg recon
+    recon_cg = recon_cg.reshape(n, n, 2)
 
     ims = dict(cmap=plt.cm.Greys_r)
-    fig, ax = plt.subplots(1, 3, figsize=(12, 4))
-    ax[0].imshow(np.linalg.norm(x.reshape(n, n, 2), axis=-1), **ims)
-    ax[1].imshow(np.abs(recon_cg), **ims)
-    ax[2].imshow(np.linalg.norm(recon_cg_2.reshape(n, n, 2), axis=-1), **ims)
+    fig, ax = plt.subplots(1, 2, figsize=(10, 5), sharex=True, sharey=True)
+    ax[0].imshow(np.linalg.norm(x, axis=-1)[::-1, :], **ims)
+    ax[1].imshow(np.linalg.norm(recon_cg, axis=-1)[::-1, :], **ims)
     fig.tight_layout()
     fig.show()
