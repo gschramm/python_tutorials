@@ -1,146 +1,121 @@
+"""demo to show how to simulate non-uniform kspace data and on how to reconstruct them via conjugate gradient"""
+
 import numpy as np
 from scipy.optimize import fmin_cg
-from scipy.misc import face
 import matplotlib.pyplot as plt
 
-import pynufft
-
-from operators import real_view_of_complex_array, complex_view_of_real_array
-from phantoms import rod_phantom
-
-
-class FwdModel:
-
-    def __init__(self, nufft, flat_input=True, pseudo_complex_mode=True):
-        self._nufft = nufft
-        self._image_shape = nufft.Nd
-        self._flatten_input = flat_input
-        self._pseudo_complex_mode = pseudo_complex_mode
-
-    def forward(self, x):
-        input_dtype = x.dtype
-
-        if self._flatten_input:
-            if self._pseudo_complex_mode:
-                x = complex_view_of_real_array(
-                    x.reshape(self._image_shape + (2, )))
-            else:
-                x = x.reshape(self._image_shape)
-        else:
-            if self._pseudo_complex_mode:
-                x = complex_view_of_real_array(x)
-
-        x_fwd = self._nufft.forward(x)
-
-        if self._pseudo_complex_mode:
-            x_fwd = real_view_of_complex_array(x_fwd).astype(input_dtype)
-
-        return x_fwd
-
-    def adjoint(self, y):
-        input_dtype = y.dtype
-
-        if self._pseudo_complex_mode:
-            y = complex_view_of_real_array(y)
-
-        y_back = self._nufft.adjoint(y) * self._nufft.Kdprod
-
-        if self._flatten_input:
-            if self._pseudo_complex_mode:
-                y_back = real_view_of_complex_array(y_back).ravel()
-            else:
-                y_back = y_back.ravel()
-        else:
-            if self._pseudo_complex_mode:
-                y_back = real_view_of_complex_array(y_back)
-
-        if self._pseudo_complex_mode:
-            y_back = y_back.astype(input_dtype)
-
-        return y_back
-
-
-class DataFidelity:
-
-    def __init__(self, fwd_model, data):
-        self._fwd_model = fwd_model
-        self._data = data
-
-    def __call__(self, x):
-        exp_data = self._fwd_model.forward(x)
-
-        return 0.5 * ((exp_data - self._data)**2).sum()
-
-    def gradient(self, x):
-        exp_data = self._fwd_model.forward(x)
-        return self._fwd_model.adjoint(exp_data - self._data)
-
+from operators import MultiChannelNonCartesianMRAcquisitionModel, ComplexGradientOperator
+from functionals import TotalCost, L2NormSquared
+from kspace_trajectories import radial_2d_golden_angle
 
 if __name__ == '__main__':
-    n = 1024
+    recon_shape = (256, 256)
     num_iterations = 100
+    undersampling_factor = 8
 
-    num_spokes = int(n * np.pi / 2) // 32
-    #num_spokes = 20
-    num_samples_per_spoke = 2 * n
+    num_spokes = int(recon_shape[1] * np.pi / 2) // undersampling_factor
+    num_samples_per_spoke = recon_shape[1]
 
-    om = np.zeros((num_spokes, num_samples_per_spoke, 2))
-    k = np.linspace(-np.pi, np.pi, num_samples_per_spoke)
+    print(f'number of spokes {num_spokes}')
+
     spoke_angles = (np.arange(num_spokes) * (2 * np.pi /
                                              (1 + np.sqrt(5)))) % (2 * np.pi)
 
-    for i, spoke_angle in enumerate(spoke_angles):
-        om[i, :, 0] = k * np.cos(spoke_angle)
-        om[i, :, 1] = k * np.sin(spoke_angle)
+    #-----------------------------------------------------------------------------
+    #-----------------------------------------------------------------------------
+    # generate pseudo-complex image and add fake 3rd dimension
+    # the image is generated on a "high-res" (1024,1024,1024) which is important
+    # to approximate the continous FT using DFT
+    # the reconstruction will be performed on a lower resolution grid
+    #-----------------------------------------------------------------------------
+    #-----------------------------------------------------------------------------
+    print('loading image')
 
-    om = om.reshape((num_samples_per_spoke * num_spokes, 2))
+    x = np.load('xcat_vol.npz')['arr_0'].reshape(1024, 1024,
+                                                 1024).astype(np.float32)
+    # select one sagital slice
+    x = x[:, :, 512]
 
-    Nd = (n, n)  # image size
-    print('setting image dimension Nd...', Nd)
-    Kd = (2 * n, 2 * n)  # k-space size
-    print('setting spectrum dimension Kd...', Kd)
-    Jd = (6, 6)  # interpolation size
-    print('setting interpolation size Jd...', Jd)
+    kspace_scaling_factors = np.array(x.shape) / np.array(recon_shape)
+    scaling_factor = (np.array(x.shape) / np.array(recon_shape)).prod()
 
-    nufftObj = pynufft.NUFFT(pynufft.helper.device_list()[0])
-    nufftObj.plan(om, Nd, Kd, Jd)
-
-    model = FwdModel(nufftObj, flat_input=True, pseudo_complex_mode=True)
-
-    # generate pseudo-complex image
-    x = np.fromfile('xcat_slice_sag.v',
-                    dtype=np.float32).reshape(1024,
-                                              1024)[:n, :n].astype(np.float32)
+    # convert to pseudo complex 3D array by adding a 0 imaginary part
     x = np.stack([x, np.zeros_like(x)], axis=-1)
 
-    #-----------------------------------------------------
+    #-----------------------------------------------------------------------------
+    #-----------------------------------------------------------------------------
+    # setup a forward model that acts on the high resolution ground truth image
+    #-----------------------------------------------------------------------------
+    #-----------------------------------------------------------------------------
+    print('setting up operators')
 
-    # the actual transforms
-    x_fwd = model.forward(x)
-    x_fwd_back = model.adjoint(x_fwd)
+    # setup the kspace sample points for the operator acting on the high res image
+    # here we only take the center which is why kmax is only a fraction np.pi
+    # reconstructing on a lower res grid needs only the "center part" of kspace
 
-    # generate a random y data set
-    y = np.random.rand(*x_fwd.real.shape)
-    y_back = model.adjoint(y)
+    kspace_sample_points_high_res = radial_2d_golden_angle(
+        num_spokes,
+        num_samples_per_spoke,
+        kmax=np.pi / kspace_scaling_factors[0]).astype(np.float32)
 
-    ip_a = (x_fwd * y).sum()
-    ip_b = (x.ravel() * y_back).sum()
+    data_simulation_operator = MultiChannelNonCartesianMRAcquisitionModel(
+        x.shape[:-1], np.expand_dims(np.ones(x.shape, dtype=x.dtype), 0),
+        kspace_sample_points_high_res)
 
-    print(ip_a, ip_b, ip_a / ip_b)
+    data = data_simulation_operator.forward(x)
 
-    data_fidelity_loss = DataFidelity(model, x_fwd)
+    # setup a forward model that acts on a lower resolution image
+    kspace_sample_points_low_res = kspace_sample_points_high_res.copy()
+
+    for i in range(kspace_scaling_factors.shape[0]):
+        kspace_sample_points_low_res[:, i] *= kspace_scaling_factors[i]
+
+    data_recon_operator = MultiChannelNonCartesianMRAcquisitionModel(
+        recon_shape,
+        np.expand_dims(np.ones(recon_shape + (2, ), dtype=x.dtype), 0),
+        kspace_sample_points_low_res,
+        scaling_factor=scaling_factor)
+
+    prior_operator = ComplexGradientOperator(recon_shape, len(recon_shape))
+
+    #-----------------------------------------------------------------------------
+    #-----------------------------------------------------------------------------
+    # setup a loss function and run a cg reconstruction
+    #-----------------------------------------------------------------------------
+    #-----------------------------------------------------------------------------
+    print('running the recon')
+
+    # switch to flat input and output need that we need for fmin_cg
+    data_recon_operator.flat_mode = True
+    prior_operator.flat_mode = True
+
+    data_norm = L2NormSquared()
+    prior_norm = L2NormSquared()
+    beta = 0.
+
+    x0 = np.zeros(np.prod(recon_shape + (2, )), dtype=x.dtype)
+
+    loss = TotalCost(data.ravel(),
+                     data_recon_operator,
+                     data_norm,
+                     prior_operator,
+                     prior_norm,
+                     beta=beta)
 
     # cg recon method
-    recon_cg = fmin_cg(data_fidelity_loss,
-                       np.zeros(x.size),
-                       fprime=data_fidelity_loss.gradient,
-                       maxiter=num_iterations)
+    recon_cg = fmin_cg(loss, x0, fprime=loss.gradient, maxiter=num_iterations)
 
     # reshape the flattened cg recon
-    recon_cg = recon_cg.reshape(n, n, 2)
+    recon_cg = recon_cg.reshape(recon_shape + (2, ))
+
+    #-----------------------------------------------------------------------------
+    #-----------------------------------------------------------------------------
+    # visualizations
+    #-----------------------------------------------------------------------------
+    #-----------------------------------------------------------------------------
 
     ims = dict(cmap=plt.cm.Greys_r)
-    fig, ax = plt.subplots(1, 2, figsize=(10, 5), sharex=True, sharey=True)
+    fig, ax = plt.subplots(1, 2, figsize=(10, 5))
     ax[0].imshow(np.linalg.norm(x, axis=-1)[::-1, :], **ims)
     ax[1].imshow(np.linalg.norm(recon_cg, axis=-1)[::-1, :], **ims)
     fig.tight_layout()

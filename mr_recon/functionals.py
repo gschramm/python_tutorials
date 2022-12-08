@@ -129,19 +129,21 @@ class TotalCost:
         self._beta = beta
 
     def __call__(self, x: npt.NDArray) -> float:
-        cost = self._data_norm(self._data_operator.forward(x) -
-                               self._data) + self._beta * self._prior_norm(
-                                   self._prior_operator.forward(x) -
-                                   self._prior_image)
+        cost = self._data_norm((self._data_operator.forward(x) - self._data))
+        if self._beta > 0:
+            cost += self._beta * self._prior_norm(
+                self._prior_operator.forward(x) - self._prior_image)
 
         return cost
 
     def gradient(self, x: npt.NDArray) -> npt.NDArray:
-        data_grad = self._data_operator.adjoint(
+        grad = self._data_operator.adjoint(
             self._data_norm.gradient(
-                self._data_operator.forward(x) - self._data))
-        prior_grad = self._beta * self._prior_operator.adjoint(
-            self._prior_norm.gradient(self._prior_operator.forward(x)) -
-            self._prior_image)
+                (self._data_operator.forward(x) - self._data)))
 
-        return (data_grad + prior_grad)
+        if self._beta > 0:
+            grad += self._beta * self._prior_operator.adjoint(
+                self._prior_norm.gradient(self._prior_operator.forward(x)) -
+                self._prior_image)
+
+        return grad
