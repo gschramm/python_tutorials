@@ -6,15 +6,15 @@ import matplotlib.pyplot as plt
 
 from operators import MultiChannelNonCartesianMRAcquisitionModel, ComplexGradientOperator
 from functionals import TotalCost, L2NormSquared
-from kspace_trajectories import radial_2d_golden_angle
+from kspace_trajectories import radial_2d_golden_angle, stack_of_2d_golden_angle
 
 if __name__ == '__main__':
     recon_shape = (256, 256)
     num_iterations = 100
-    undersampling_factor = 8
+    undersampling_factor = 1
 
     num_spokes = int(recon_shape[1] * np.pi / 2) // undersampling_factor
-    num_samples_per_spoke = recon_shape[1]
+    num_samples_per_spoke = recon_shape[0]
 
     print(f'number of spokes {num_spokes}')
 
@@ -33,11 +33,21 @@ if __name__ == '__main__':
 
     x = np.load('xcat_vol.npz')['arr_0'].reshape(1024, 1024,
                                                  1024).astype(np.float32)
+
+    # swap axes to have sagittal axis in front
+    x = np.swapaxes(x, 0, 2)
+
     # select one sagital slice
-    x = x[:, :, 512]
+    if len(recon_shape) == 2:
+        x = x[512, :, :]
+    elif len(recon_shape) == 3:
+        # take only every second element in 3D to save memory
+        x = x[::4, ::4, ::4]
+    else:
+        raise ValueError
 
     kspace_scaling_factors = np.array(x.shape) / np.array(recon_shape)
-    scaling_factor = (np.array(x.shape) / np.array(recon_shape)).prod()
+    scaling_factor = kspace_scaling_factors.prod()
 
     # convert to pseudo complex 3D array by adding a 0 imaginary part
     x = np.stack([x, np.zeros_like(x)], axis=-1)
@@ -53,10 +63,18 @@ if __name__ == '__main__':
     # here we only take the center which is why kmax is only a fraction np.pi
     # reconstructing on a lower res grid needs only the "center part" of kspace
 
-    kspace_sample_points_high_res = radial_2d_golden_angle(
-        num_spokes,
-        num_samples_per_spoke,
-        kmax=np.pi / kspace_scaling_factors[0]).astype(np.float32)
+    if len(recon_shape) == 2:
+        kspace_sample_points_high_res = radial_2d_golden_angle(
+            num_spokes,
+            num_samples_per_spoke,
+            kmax=np.pi / kspace_scaling_factors[-1]).astype(np.float32)
+    elif len(recon_shape) == 3:
+        kspace_sample_points_high_res = stack_of_2d_golden_angle(
+            num_stacks=recon_shape[0],
+            kzmax=np.pi / kspace_scaling_factors[0],
+            num_spokes=num_spokes,
+            num_samples_per_spoke=num_samples_per_spoke,
+            kmax=np.pi / kspace_scaling_factors[-1]).astype(np.float32)
 
     data_simulation_operator = MultiChannelNonCartesianMRAcquisitionModel(
         x.shape[:-1], np.expand_dims(np.ones(x.shape, dtype=x.dtype), 0),
@@ -114,9 +132,15 @@ if __name__ == '__main__':
     #-----------------------------------------------------------------------------
     #-----------------------------------------------------------------------------
 
-    ims = dict(cmap=plt.cm.Greys_r)
+    ims = dict(cmap=plt.cm.Greys_r, origin='lower')
     fig, ax = plt.subplots(1, 2, figsize=(10, 5))
-    ax[0].imshow(np.linalg.norm(x, axis=-1)[::-1, :], **ims)
-    ax[1].imshow(np.linalg.norm(recon_cg, axis=-1)[::-1, :], **ims)
+    if len(recon_shape) == 2:
+        ax[0].imshow(np.linalg.norm(x, axis=-1).T, **ims)
+        ax[1].imshow(np.linalg.norm(recon_cg, axis=-1).T, **ims)
+    if len(recon_shape) == 3:
+        ax[0].imshow(np.linalg.norm(x, axis=-1)[x.shape[0] // 2, ...].T, **ims)
+        ax[1].imshow(
+            np.linalg.norm(recon_cg, axis=-1)[recon_shape[0] // 2, ...].T,
+            **ims)
     fig.tight_layout()
     fig.show()

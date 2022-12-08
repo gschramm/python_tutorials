@@ -30,3 +30,22 @@ def radial_2d_golden_angle(num_spokes: int,
           1] = np.sin(angle) * k1d
 
     return k
+
+
+def stack_of_2d_golden_angle(num_stacks: int, kzmax: float = np.pi, **kwargs):
+
+    star_kspace_sample_points = radial_2d_golden_angle(**kwargs)
+    num_star_samples = star_kspace_sample_points.shape[0]
+
+    kz1d = np.linspace(-kzmax, kzmax, num_stacks, endpoint=False)
+
+    k = np.zeros((num_stacks * num_star_samples, 3))
+
+    for i, kz in enumerate(kz1d):
+        start = i * num_star_samples
+        end = (i + 1) * num_star_samples
+
+        k[start:end, 0] = kz
+        k[start:end, 1:] = star_kspace_sample_points
+
+    return k

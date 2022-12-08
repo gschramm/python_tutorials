@@ -457,14 +457,14 @@ class MultiChannelNonCartesianMRAcquisitionModel(LinearOperator):
             figure containing the scatter plot
         """
 
-        if self._kspace_sample_points.ndim == 2:
+        if self._kspace_sample_points.shape[1] == 2:
             fig, ax = plt.subplots()
             ax.plot(self.kspace_sample_points[:, 0],
                     self._kspace_sample_points[:, 1])
             fig.tight_layout()
             fig.show()
 
-        elif self._kspace_sample_points.ndim == 3:
+        elif self._kspace_sample_points.shape[1] == 3:
             fig = plt.figure()
             ax = fig.add_subplot(projection='3d')
             ax.scatter(self.kspace_sample_points[:, 0],
