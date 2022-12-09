@@ -76,6 +76,7 @@ class FFT:
         self._dx = x[1] - x[0]
         self._x = x
         self._phase_factor = self.dx * np.exp(-1j * self.k * x[0])
+        self._scale_factor = np.sqrt(x.size)
 
     @property
     def x(self) -> npt.NDArray:
@@ -93,11 +94,17 @@ class FFT:
     def phase_factor(self) -> npt.NDArray:
         return self._phase_factor
 
+    @property
+    def scale_factor(self) -> float:
+        return self._scale_factor
+
     def forward(self, f: npt.NDArray) -> npt.NDArray:
-        return np.fft.fft(f) * self.phase_factor
+        return np.fft.fft(f,
+                          norm='ortho') * self.phase_factor * self.scale_factor
 
     def adjoint(self, ft: npt.NDArray) -> npt.NDArray:
-        return np.fft.ifft(ft / self.phase_factor)
+        return np.fft.ifft(ft * self.scale_factor / self.phase_factor,
+                           norm='ortho')
 
 
 if __name__ == '__main__':
@@ -141,8 +148,10 @@ if __name__ == '__main__':
     cont_FT_sampled_high = signal.continous_ft_scaled(k_high)
     cont_FT_sampled_low = signal.continous_ft_scaled(k_low)
 
-    f_recon_high = fft_high_res.adjoint(cont_FT_sampled_high)
-    f_recon_low = fft_low_res.adjoint(cont_FT_sampled_low)
+    f_recon_high = fft_high_res.adjoint(cont_FT_sampled_high) / (
+        fft_high_res.scale_factor**2)
+    f_recon_low = fft_low_res.adjoint(cont_FT_sampled_low) / (
+        fft_low_res.scale_factor**2)
 
     #-----------------------------------------------------------------------------------------------------------------
     #-----------------------------------------------------------------------------------------------------------------
