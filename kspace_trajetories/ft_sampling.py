@@ -1,5 +1,6 @@
 """script to understand sampliong of fourier space and discrete FT better"""
 import abc
+import functools
 import numpy as np
 import numpy.typing as npt
 import matplotlib.pyplot as plt
@@ -85,6 +86,24 @@ class GaussSignal(AnalysticalFourierSignal):
         return np.sqrt(np.pi) * np.exp(-(k**2) / (4)) / np.sqrt(2 * np.pi)
 
 
+class CompoundAnalysticalFourierSignal():
+
+    def __init__(self, signals: list[AnalysticalFourierSignal]):
+        self._signals = signals
+
+    @property
+    def signals(self) -> list[AnalysticalFourierSignal]:
+        return self._signals
+
+    def signal(self, x: npt.NDArray) -> npt.NDArray:
+        return functools.reduce(lambda a, b: a + b,
+                                [z.signal(x) for z in self.signals])
+
+    def continous_ft(self, x: npt.NDArray) -> npt.NDArray:
+        return functools.reduce(lambda a, b: a + b,
+                                [z.continous_ft(x) for z in self.signals])
+
+
 class FFT:
 
     def __init__(self, x: npt.NDArray) -> None:
@@ -133,10 +152,12 @@ class FFT:
 if __name__ == '__main__':
 
     n_high = 128
-    n_low = 32
+    n_low = 64
     x0 = 1.0
-    #signal = GaussSignal(stretch=10., scale=0.5, shift=0.4)
-    signal = SquareSignal(stretch=1.2, scale=0.5, shift=0.0)
+    signal1 = SquareSignal(stretch=1., scale=1, shift=0.1)
+    signal2 = SquareSignal(stretch=1.5, scale=-0.5, shift=0.1)
+    signal3 = SquareSignal(stretch=4, scale=0.25, shift=0.1)
+    signal = CompoundAnalysticalFourierSignal([signal1, signal2, signal3])
 
     x_high, dx_high = np.linspace(-x0,
                                   x0,
@@ -186,7 +207,8 @@ if __name__ == '__main__':
     ms = 4
 
     x_super_high = np.linspace(-1, 1, 2048 * 16)
-    k_super_high = np.linspace(k_high.min(), k_high.max(), 2048 * 16)
+    k_super_high = np.linspace(1.2 * k_high.min(), 1.2 * k_high.max(),
+                               2048 * 16)
 
     fig, ax = plt.subplots(2, 4, figsize=(16, 8))
     ax[0, 0].plot(x_super_high, signal.signal(x_super_high), 'k-', lw=0.5)
@@ -237,20 +259,21 @@ if __name__ == '__main__':
 
     ax[1, 0].plot(x_super_high, signal.signal(x_super_high), 'k-', lw=0.5)
     ax[1, 0].plot(x_high,
-                  f_recon_high,
+                  np.abs(f_recon_high),
                   'x-',
                   ms=ms,
                   color=plt.cm.tab10(0),
                   lw=0.5)
     ax[1, 0].plot(x_low,
-                  f_recon_low,
+                  np.abs(f_recon_low),
                   '.-',
                   ms=ms,
                   color=plt.cm.tab10(1),
                   lw=0.5)
     ax[1, 0].grid(ls=":")
     ax[1, 0].set_xlabel("x")
-    ax[1, 0].set_title("reconstructed signal")
+    ax[1, 0].set_title("reconstructed signal of sampled cont. FT",
+                       fontsize='medium')
 
     ax[0, 2].set_xlim(k_low.min(), k_low.max())
     ax[0, 3].set_xlim(k_low.min(), -8)
@@ -265,18 +288,18 @@ if __name__ == '__main__':
     ax[1, 3].set_ylim(tmp_min, tmp_max)
 
     ax[0, 0].set_xlabel("x")
-    ax[0, 0].set_title("signal")
+    ax[0, 0].set_title("signal", fontsize='medium')
 
     for axx in ax[:, 1:].ravel():
         axx.set_xlabel("k")
 
-    ax[0, 1].set_title("Re(FT(signal)")
-    ax[0, 2].set_title("Re(FT(signal) - zoom 1")
-    ax[0, 3].set_title("Re(FT(signal) - zoom 2")
+    ax[0, 1].set_title("Re(FT(signal)", fontsize='medium')
+    ax[0, 2].set_title("Re(FT(signal) - zoom 1", fontsize='medium')
+    ax[0, 3].set_title("Re(FT(signal) - zoom 2", fontsize='medium')
 
-    ax[1, 1].set_title("Im(FT(signal)")
-    ax[1, 2].set_title("Im(FT(signal) - zoom 1")
-    ax[1, 3].set_title("Im(FT(signal) - zoom 2")
+    ax[1, 1].set_title("Im(FT(signal)", fontsize='medium')
+    ax[1, 2].set_title("Im(FT(signal) - zoom 1", fontsize='medium')
+    ax[1, 3].set_title("Im(FT(signal) - zoom 2", fontsize='medium')
 
     for axx in ax.ravel():
         axx.grid(ls=":")
