@@ -34,6 +34,9 @@ if __name__ == '__main__':
     fft_high_res = FFT(x_high)
     fft_low_res = FFT(x_low)
 
+    fft_high_res.adjointness_test()
+    fft_low_res.adjointness_test()
+
     k_high = fft_high_res.k
     k_low = fft_low_res.k
 
@@ -51,27 +54,6 @@ if __name__ == '__main__':
 
     f_recon_high = fft_high_res.inverse(cont_FT_sampled_high)
     f_recon_low = fft_low_res.inverse(cont_FT_sampled_low)
-
-    #-----------------------------------------------------------------------------------------------------------------
-    #-----------------------------------------------------------------------------------------------------------------
-    # part 3: check adjointness of operators
-    #-----------------------------------------------------------------------------------------------------------------
-    #-----------------------------------------------------------------------------------------------------------------
-
-    np.random.seed(1)
-    model = fft_high_res
-    n = n_high
-
-    x = np.random.rand(n) + 1j * np.random.rand(n)
-    y = np.random.rand(n) + 1j * np.random.rand(n)
-
-    x_fwd = model.forward(x)
-    y_adj = model.adjoint(y)
-
-    ip1 = (np.conj(y) * x_fwd).sum()
-    ip2 = (np.conj(y_adj) * x).sum()
-
-    assert (np.isclose(ip1, ip2))
 
     #-----------------------------------------------------------------------------------------------------------------
     #-----------------------------------------------------------------------------------------------------------------
