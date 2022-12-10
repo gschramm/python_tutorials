@@ -29,24 +29,24 @@ class AnalysticalFourierSignal:
         return self._shift
 
     @abc.abstractmethod
-    def signal(self, x: npt.NDArray) -> npt.NDArray:
+    def _signal(self, x: npt.NDArray) -> npt.NDArray:
         raise NotImplementedError
 
     @abc.abstractmethod
-    def continous_ft(self, k: npt.NDArray) -> npt.NDArray:
+    def _continous_ft(self, k: npt.NDArray) -> npt.NDArray:
         raise NotImplementedError
 
-    def signal_scaled(self, x: npt.NDArray) -> npt.NDArray:
-        return self.scale * self.signal((x - self.shift) * self.stretch)
+    def signal(self, x: npt.NDArray) -> npt.NDArray:
+        return self.scale * self._signal((x - self.shift) * self.stretch)
 
-    def continous_ft_scaled(self, k: npt.NDArray) -> npt.NDArray:
-        return self.scale * np.exp(-1j * self.shift * k) * self.continous_ft(
+    def continous_ft(self, k: npt.NDArray) -> npt.NDArray:
+        return self.scale * np.exp(-1j * self.shift * k) * self._continous_ft(
             k / self.stretch) / np.abs(self.stretch)
 
 
 class SquareSignal(AnalysticalFourierSignal):
 
-    def signal(self, x: npt.NDArray) -> npt.NDArray:
+    def _signal(self, x: npt.NDArray) -> npt.NDArray:
         y = np.zeros_like(x)
         ipos = np.where(np.logical_and(x >= 0, x < 0.5))
         ineg = np.where(np.logical_and(x >= -0.5, x < 0))
@@ -56,13 +56,13 @@ class SquareSignal(AnalysticalFourierSignal):
 
         return y
 
-    def continous_ft(self, k: npt.NDArray) -> npt.NDArray:
+    def _continous_ft(self, k: npt.NDArray) -> npt.NDArray:
         return np.sinc(k / 2 / np.pi) / np.sqrt(2 * np.pi)
 
 
 class TriangleSignal(AnalysticalFourierSignal):
 
-    def signal(self, x: npt.NDArray) -> npt.NDArray:
+    def _signal(self, x: npt.NDArray) -> npt.NDArray:
         y = np.zeros_like(x)
         ipos = np.where(np.logical_and(x >= 0, x < 1))
         ineg = np.where(np.logical_and(x >= -1, x < 0))
@@ -72,16 +72,16 @@ class TriangleSignal(AnalysticalFourierSignal):
 
         return y
 
-    def continous_ft(self, k: npt.NDArray) -> npt.NDArray:
+    def _continous_ft(self, k: npt.NDArray) -> npt.NDArray:
         return np.sinc(k / 2 / np.pi)**2 / np.sqrt(2 * np.pi)
 
 
 class GaussSignal(AnalysticalFourierSignal):
 
-    def signal(self, x: npt.NDArray) -> npt.NDArray:
+    def _signal(self, x: npt.NDArray) -> npt.NDArray:
         return np.exp(-x**2)
 
-    def continous_ft(self, k: npt.NDArray) -> npt.NDArray:
+    def _continous_ft(self, k: npt.NDArray) -> npt.NDArray:
         return np.sqrt(np.pi) * np.exp(-(k**2) / (4)) / np.sqrt(2 * np.pi)
 
 
@@ -122,13 +122,21 @@ class FFT:
                            norm='ortho')
 
 
+#-----------------------------------------------------------------------------------------------------------------
+#-----------------------------------------------------------------------------------------------------------------
+#-----------------------------------------------------------------------------------------------------------------
+#-----------------------------------------------------------------------------------------------------------------
+#-----------------------------------------------------------------------------------------------------------------
+#-----------------------------------------------------------------------------------------------------------------
+#-----------------------------------------------------------------------------------------------------------------
+
 if __name__ == '__main__':
 
     n_high = 128
     n_low = 32
     x0 = 1.0
     #signal = GaussSignal(stretch=10., scale=0.5, shift=0.4)
-    signal = SquareSignal(stretch=1.2, scale=0.5, shift=0.4)
+    signal = SquareSignal(stretch=1.2, scale=0.5, shift=0.0)
 
     x_high, dx_high = np.linspace(-x0,
                                   x0,
@@ -137,8 +145,8 @@ if __name__ == '__main__':
                                   retstep=True)
     x_low, dx_low = np.linspace(-x0, x0, n_low, endpoint=False, retstep=True)
 
-    f_high = signal.signal_scaled(x_high)
-    f_low = signal.signal_scaled(x_low)
+    f_high = signal.signal(x_high)
+    f_low = signal.signal(x_low)
 
     #-----------------------------------------------------------------------------------------------------------------
     #-----------------------------------------------------------------------------------------------------------------
@@ -161,8 +169,8 @@ if __name__ == '__main__':
     #-----------------------------------------------------------------------------------------------------------------
     #-----------------------------------------------------------------------------------------------------------------
 
-    cont_FT_sampled_high = signal.continous_ft_scaled(k_high)
-    cont_FT_sampled_low = signal.continous_ft_scaled(k_low)
+    cont_FT_sampled_high = signal.continous_ft(k_high)
+    cont_FT_sampled_low = signal.continous_ft(k_low)
 
     f_recon_high = fft_high_res.adjoint(cont_FT_sampled_high) / (
         fft_high_res.scale_factor**2)
@@ -180,70 +188,98 @@ if __name__ == '__main__':
     x_super_high = np.linspace(-1, 1, 2048 * 16)
     k_super_high = np.linspace(k_high.min(), k_high.max(), 2048 * 16)
 
-    fig, ax = plt.subplots(1, 4, figsize=(4 * 4, 4))
-    ax[0].plot(x_super_high, signal.signal_scaled(x_super_high), 'k-', lw=0.5)
-    ax[0].plot(x_high, f_high, 'x', ms=ms, color=plt.cm.tab10(0))
-    ax[0].plot(x_low, f_low, '.', ms=ms, color=plt.cm.tab10(1))
+    fig, ax = plt.subplots(2, 4, figsize=(16, 8))
+    ax[0, 0].plot(x_super_high, signal.signal(x_super_high), 'k-', lw=0.5)
+    ax[0, 0].plot(x_high, f_high, 'x', ms=ms, color=plt.cm.tab10(0))
+    ax[0, 0].plot(x_low, f_low, '.', ms=ms, color=plt.cm.tab10(1))
 
-    ax[1].plot(k_super_high,
-               signal.continous_ft_scaled(k_super_high),
-               'k-',
-               lw=0.5)
-    ax[1].plot(k_high, F_high.real, 'x', ms=ms, color=plt.cm.tab10(0))
-    ax[1].plot(k_low, F_low.real, '.', ms=ms, color=plt.cm.tab10(1))
+    ax[0, 1].plot(k_super_high,
+                  signal.continous_ft(k_super_high).real,
+                  'k-',
+                  lw=0.5)
+    ax[0, 1].plot(k_high, F_high.real, 'x', ms=ms, color=plt.cm.tab10(0))
+    ax[0, 1].plot(k_low, F_low.real, '.', ms=ms, color=plt.cm.tab10(1))
 
-    ax[2].plot(k_super_high,
-               signal.continous_ft_scaled(k_super_high),
-               'k-',
-               lw=0.5)
-    ax[2].plot(k_high, F_high.real, 'x', ms=ms, color=plt.cm.tab10(0))
-    ax[2].plot(k_low, F_low.real, '.', ms=ms, color=plt.cm.tab10(1))
+    ax[0, 2].plot(k_super_high,
+                  signal.continous_ft(k_super_high).real,
+                  'k-',
+                  lw=0.5)
+    ax[0, 2].plot(k_high, F_high.real, 'x', ms=ms, color=plt.cm.tab10(0))
+    ax[0, 2].plot(k_low, F_low.real, '.', ms=ms, color=plt.cm.tab10(1))
 
-    ax[3].plot(k_super_high,
-               signal.continous_ft_scaled(k_super_high),
-               'k-',
-               lw=0.5)
-    ax[3].plot(k_high, F_high.real, 'x', ms=ms, color=plt.cm.tab10(0))
-    ax[3].plot(k_low, F_low.real, '.', ms=ms, color=plt.cm.tab10(1))
+    ax[0, 3].plot(k_super_high,
+                  signal.continous_ft(k_super_high).real,
+                  'k-',
+                  lw=0.5)
+    ax[0, 3].plot(k_high, F_high.real, 'x', ms=ms, color=plt.cm.tab10(0))
+    ax[0, 3].plot(k_low, F_low.real, '.', ms=ms, color=plt.cm.tab10(1))
 
-    ax[2].set_xlim(k_low.min(), k_low.max())
-    ax[3].set_xlim(k_low.min(), -8)
-    tmp_min = signal.continous_ft_scaled(
-        k_super_high[k_super_high <= -5]).min()
-    tmp_max = signal.continous_ft_scaled(
-        k_super_high[k_super_high <= -5]).max()
-    ax[3].set_ylim(tmp_min, tmp_max)
+    ax[1, 1].plot(k_super_high,
+                  signal.continous_ft(k_super_high).imag,
+                  'k-',
+                  lw=0.5)
+    ax[1, 1].plot(k_high, F_high.imag, 'x', ms=ms, color=plt.cm.tab10(0))
+    ax[1, 1].plot(k_low, F_low.imag, '.', ms=ms, color=plt.cm.tab10(1))
 
-    ax[0].set_xlabel("x")
-    ax[0].set_title("signal")
+    ax[1, 2].plot(k_super_high,
+                  signal.continous_ft(k_super_high).imag,
+                  'k-',
+                  lw=0.5)
+    ax[1, 2].plot(k_high, F_high.imag, 'x', ms=ms, color=plt.cm.tab10(0))
+    ax[1, 2].plot(k_low, F_low.imag, '.', ms=ms, color=plt.cm.tab10(1))
 
-    for axx in ax[1:]:
+    ax[1, 3].plot(k_super_high,
+                  signal.continous_ft(k_super_high).imag,
+                  'k-',
+                  lw=0.5)
+    ax[1, 3].plot(k_high, F_high.imag, 'x', ms=ms, color=plt.cm.tab10(0))
+    ax[1, 3].plot(k_low, F_low.imag, '.', ms=ms, color=plt.cm.tab10(1))
+
+    ax[1, 0].plot(x_super_high, signal.signal(x_super_high), 'k-', lw=0.5)
+    ax[1, 0].plot(x_high,
+                  f_recon_high,
+                  'x-',
+                  ms=ms,
+                  color=plt.cm.tab10(0),
+                  lw=0.5)
+    ax[1, 0].plot(x_low,
+                  f_recon_low,
+                  '.-',
+                  ms=ms,
+                  color=plt.cm.tab10(1),
+                  lw=0.5)
+    ax[1, 0].grid(ls=":")
+    ax[1, 0].set_xlabel("x")
+    ax[1, 0].set_title("reconstructed signal")
+
+    ax[0, 2].set_xlim(k_low.min(), k_low.max())
+    ax[0, 3].set_xlim(k_low.min(), -8)
+    tmp_min = signal.continous_ft(k_super_high[k_super_high <= -5]).real.min()
+    tmp_max = signal.continous_ft(k_super_high[k_super_high <= -5]).real.max()
+    ax[0, 3].set_ylim(tmp_min, tmp_max)
+
+    ax[1, 2].set_xlim(k_low.min(), k_low.max())
+    ax[1, 3].set_xlim(k_low.min(), -8)
+    tmp_min = signal.continous_ft(k_super_high[k_super_high <= -5]).imag.min()
+    tmp_max = signal.continous_ft(k_super_high[k_super_high <= -5]).imag.max()
+    ax[1, 3].set_ylim(tmp_min, tmp_max)
+
+    ax[0, 0].set_xlabel("x")
+    ax[0, 0].set_title("signal")
+
+    for axx in ax[:, 1:].ravel():
         axx.set_xlabel("k")
 
-    ax[1].set_title("Re(FT(signal)")
-    ax[2].set_title("Re(FT(signal) - zoom 1")
-    ax[3].set_title("Re(FT(signal) - zoom 2")
+    ax[0, 1].set_title("Re(FT(signal)")
+    ax[0, 2].set_title("Re(FT(signal) - zoom 1")
+    ax[0, 3].set_title("Re(FT(signal) - zoom 2")
 
-    for axx in ax:
+    ax[1, 1].set_title("Im(FT(signal)")
+    ax[1, 2].set_title("Im(FT(signal) - zoom 1")
+    ax[1, 3].set_title("Im(FT(signal) - zoom 2")
+
+    for axx in ax.ravel():
         axx.grid(ls=":")
 
     fig.tight_layout()
     fig.show()
-
-    #-----------------------------------------------------------------------------------------------------------------
-    #-----------------------------------------------------------------------------------------------------------------
-    # Figure 2: check how inverse DFT of samples from the true cont. FT approximates the true signal
-    #-----------------------------------------------------------------------------------------------------------------
-    #-----------------------------------------------------------------------------------------------------------------
-
-    x_super_high = np.linspace(-1, 1, 1000)
-
-    fig2, ax2 = plt.subplots(figsize=(4, 4))
-    ax2.plot(x_super_high, signal.signal_scaled(x_super_high), 'k-', lw=0.5)
-    ax2.plot(x_high, f_recon_high, 'x-', ms=ms, color=plt.cm.tab10(0), lw=0.5)
-    ax2.plot(x_low, f_recon_low, '.-', ms=ms, color=plt.cm.tab10(1), lw=0.5)
-    ax2.grid(ls=":")
-    ax2.set_xlabel("x")
-    ax2.set_title("recon structed signal")
-    fig2.tight_layout()
-    fig2.show()
