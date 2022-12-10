@@ -125,6 +125,10 @@ class FFT:
         return np.fft.fftfreq(self.x.size, d=self.dx) * 2 * np.pi
 
     @property
+    def k_scaled(self) -> npt.NDArray:
+        return self.k * self.dx
+
+    @property
     def phase_factor(self) -> npt.NDArray:
         return self._phase_factor
 
