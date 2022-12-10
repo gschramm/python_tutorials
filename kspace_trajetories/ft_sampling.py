@@ -158,9 +158,9 @@ if __name__ == '__main__':
     n_high = 128
     n_low = 64
     x0 = 1.0
-    signal1 = SquareSignal(stretch=1., scale=1, shift=0.1)
-    signal2 = SquareSignal(stretch=1.5, scale=-0.5, shift=0.1)
-    signal3 = SquareSignal(stretch=4, scale=0.25, shift=0.1)
+    signal1 = SquareSignal(stretch=1., scale=1, shift=0.0)
+    signal2 = SquareSignal(stretch=1.5, scale=-0.5, shift=0.0)
+    signal3 = SquareSignal(stretch=4, scale=0.25, shift=0.0)
     signal = CompoundAnalysticalFourierSignal([signal1, signal2, signal3])
 
     x_high, dx_high = np.linspace(-x0,
@@ -214,96 +214,91 @@ if __name__ == '__main__':
     k_super_high = np.linspace(1.2 * k_high.min(), 1.2 * k_high.max(),
                                2048 * 16)
 
-    fig, ax = plt.subplots(2, 4, figsize=(16, 8))
+    fig, ax = plt.subplots(3, 3, figsize=(14, 9), sharey='row')
     ax[0, 0].plot(x_super_high, signal.signal(x_super_high), 'k-', lw=0.5)
     ax[0, 0].plot(x_high, f_high, 'x', ms=ms, color=plt.cm.tab10(0))
     ax[0, 0].plot(x_low, f_low, '.', ms=ms, color=plt.cm.tab10(1))
 
-    ax[0, 1].plot(k_super_high,
-                  signal.continous_ft(k_super_high).real,
-                  'k-',
-                  lw=0.5)
-    ax[0, 1].plot(k_high, F_high.real, 'x', ms=ms, color=plt.cm.tab10(0))
-    ax[0, 1].plot(k_low, F_low.real, '.', ms=ms, color=plt.cm.tab10(1))
-
-    ax[0, 2].plot(k_super_high,
-                  signal.continous_ft(k_super_high).real,
-                  'k-',
-                  lw=0.5)
-    ax[0, 2].plot(k_high, F_high.real, 'x', ms=ms, color=plt.cm.tab10(0))
-    ax[0, 2].plot(k_low, F_low.real, '.', ms=ms, color=plt.cm.tab10(1))
-
-    ax[0, 3].plot(k_super_high,
-                  signal.continous_ft(k_super_high).real,
-                  'k-',
-                  lw=0.5)
-    ax[0, 3].plot(k_high, F_high.real, 'x', ms=ms, color=plt.cm.tab10(0))
-    ax[0, 3].plot(k_low, F_low.real, '.', ms=ms, color=plt.cm.tab10(1))
-
-    ax[1, 1].plot(k_super_high,
-                  signal.continous_ft(k_super_high).imag,
-                  'k-',
-                  lw=0.5)
-    ax[1, 1].plot(k_high, F_high.imag, 'x', ms=ms, color=plt.cm.tab10(0))
-    ax[1, 1].plot(k_low, F_low.imag, '.', ms=ms, color=plt.cm.tab10(1))
-
-    ax[1, 2].plot(k_super_high,
-                  signal.continous_ft(k_super_high).imag,
-                  'k-',
-                  lw=0.5)
-    ax[1, 2].plot(k_high, F_high.imag, 'x', ms=ms, color=plt.cm.tab10(0))
-    ax[1, 2].plot(k_low, F_low.imag, '.', ms=ms, color=plt.cm.tab10(1))
-
-    ax[1, 3].plot(k_super_high,
-                  signal.continous_ft(k_super_high).imag,
-                  'k-',
-                  lw=0.5)
-    ax[1, 3].plot(k_high, F_high.imag, 'x', ms=ms, color=plt.cm.tab10(0))
-    ax[1, 3].plot(k_low, F_low.imag, '.', ms=ms, color=plt.cm.tab10(1))
-
-    ax[1, 0].plot(x_super_high, signal.signal(x_super_high), 'k-', lw=0.5)
-    ax[1, 0].plot(x_high,
-                  np.abs(f_recon_high),
+    ax[0, 1].plot(x_super_high, signal.signal(x_super_high), 'k-', lw=0.5)
+    ax[0, 1].plot(x_high,
+                  f_recon_high.real,
                   'x-',
                   ms=ms,
                   color=plt.cm.tab10(0),
                   lw=0.5)
-    ax[1, 0].plot(x_low,
-                  np.abs(f_recon_low),
+    ax[0, 1].plot(x_low,
+                  f_recon_low.real,
                   '.-',
                   ms=ms,
                   color=plt.cm.tab10(1),
                   lw=0.5)
-    ax[1, 0].grid(ls=":")
-    ax[1, 0].set_xlabel("x")
-    ax[1, 0].set_title("reconstructed signal of sampled cont. FT",
-                       fontsize='medium')
 
-    ax[0, 2].set_xlim(k_low.min(), k_low.max())
-    ax[0, 3].set_xlim(k_low.min(), -8)
-    tmp_min = signal.continous_ft(k_super_high[k_super_high <= -5]).real.min()
-    tmp_max = signal.continous_ft(k_super_high[k_super_high <= -5]).real.max()
-    ax[0, 3].set_ylim(tmp_min, tmp_max)
+    ax[0, 2].plot(x_high,
+                  f_recon_high.imag,
+                  'x-',
+                  ms=ms,
+                  color=plt.cm.tab10(0),
+                  lw=0.5)
+    ax[0, 2].plot(x_low,
+                  f_recon_low.imag,
+                  '.-',
+                  ms=ms,
+                  color=plt.cm.tab10(1),
+                  lw=0.5)
 
-    ax[1, 2].set_xlim(k_low.min(), k_low.max())
-    ax[1, 3].set_xlim(k_low.min(), -8)
-    tmp_min = signal.continous_ft(k_super_high[k_super_high <= -5]).imag.min()
-    tmp_max = signal.continous_ft(k_super_high[k_super_high <= -5]).imag.max()
-    ax[1, 3].set_ylim(tmp_min, tmp_max)
+    for k in range(3):
+        ax[1, k].plot(k_super_high,
+                      signal.continous_ft(k_super_high).real,
+                      'k-',
+                      lw=0.5)
+    ax[1, 0].plot(k_high, F_high.real, 'x', ms=ms, color=plt.cm.tab10(0))
+    ax[1, 0].plot(k_low, F_low.real, '.', ms=ms, color=plt.cm.tab10(1))
 
-    ax[0, 0].set_xlabel("x")
+    ax[1, 1].plot(k_high, F_high.real, 'x', ms=ms, color=plt.cm.tab10(0))
+    ax[1, 1].plot(k_low, F_low.real, '.', ms=ms, color=plt.cm.tab10(1))
+
+    ax[1, 2].plot(k_high, F_high.real, 'x', ms=ms, color=plt.cm.tab10(0))
+    ax[1, 2].plot(k_low, F_low.real, '.', ms=ms, color=plt.cm.tab10(1))
+
+    for k in range(3):
+        ax[2, k].plot(k_super_high,
+                      signal.continous_ft(k_super_high).imag,
+                      'k-',
+                      lw=0.5)
+    ax[2, 0].plot(k_high, F_high.imag, 'x', ms=ms, color=plt.cm.tab10(0))
+    ax[2, 0].plot(k_low, F_low.imag, '.', ms=ms, color=plt.cm.tab10(1))
+
+    ax[2, 0].plot(k_super_high,
+                  signal.continous_ft(k_super_high).imag,
+                  'k-',
+                  lw=0.5)
+    ax[2, 1].plot(k_high, F_high.imag, 'x', ms=ms, color=plt.cm.tab10(0))
+    ax[2, 1].plot(k_low, F_low.imag, '.', ms=ms, color=plt.cm.tab10(1))
+    ax[2, 2].plot(k_high, F_high.imag, 'x', ms=ms, color=plt.cm.tab10(0))
+    ax[2, 2].plot(k_low, F_low.imag, '.', ms=ms, color=plt.cm.tab10(1))
+
+    ax[1, 1].set_xlim(k_low.min(), k_low.max())
+    ax[1, 2].set_xlim(k_low.min(), -8)
+
+    ax[2, 1].set_xlim(k_low.min(), k_low.max())
+    ax[2, 2].set_xlim(k_low.min(), -8)
+
+    for k in range(3):
+        ax[0, k].set_xlabel("x")
     ax[0, 0].set_title("signal", fontsize='medium')
+    ax[0, 1].set_title("recon of sampled cont. FT (Re)", fontsize='medium')
+    ax[0, 2].set_title("recon of sampled cont. FT (Im)", fontsize='medium')
 
-    for axx in ax[:, 1:].ravel():
+    for axx in ax[1:, :].ravel():
         axx.set_xlabel("k")
 
-    ax[0, 1].set_title("Re(FT(signal)", fontsize='medium')
-    ax[0, 2].set_title("Re(FT(signal) - zoom 1", fontsize='medium')
-    ax[0, 3].set_title("Re(FT(signal) - zoom 2", fontsize='medium')
+    ax[1, 0].set_title("Re(FT(signal)", fontsize='medium')
+    ax[1, 1].set_title("Re(FT(signal) - zoom 1", fontsize='medium')
+    ax[1, 2].set_title("Re(FT(signal) - zoom 2", fontsize='medium')
 
-    ax[1, 1].set_title("Im(FT(signal)", fontsize='medium')
-    ax[1, 2].set_title("Im(FT(signal) - zoom 1", fontsize='medium')
-    ax[1, 3].set_title("Im(FT(signal) - zoom 2", fontsize='medium')
+    ax[2, 0].set_title("Im(FT(signal)", fontsize='medium')
+    ax[2, 1].set_title("Im(FT(signal) - zoom 1", fontsize='medium')
+    ax[2, 2].set_title("Im(FT(signal) - zoom 2", fontsize='medium')
 
     for axx in ax.ravel():
         axx.grid(ls=":")
