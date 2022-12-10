@@ -6,13 +6,19 @@ import matplotlib.pyplot as plt
 
 
 class AnalysticalFourierSignal:
+    """abstract base class for 1D signals where the analytical Fourier transform exists"""
 
-    def __init__(self, scale: float = 1.):
+    def __init__(self, scale: float = 1., stretch: float = 1.):
         self._scale = scale
+        self._stretch = stretch
 
     @property
     def scale(self) -> float:
         return self._scale
+
+    @property
+    def stretch(self) -> float:
+        return self._stretch
 
     @abc.abstractmethod
     def signal(self, x: npt.NDArray) -> npt.NDArray:
@@ -23,10 +29,11 @@ class AnalysticalFourierSignal:
         raise NotImplementedError
 
     def signal_scaled(self, x: npt.NDArray) -> npt.NDArray:
-        return self.signal(x * self.scale)
+        return self.scale * self.signal(x * self.stretch)
 
     def continous_ft_scaled(self, k: npt.NDArray) -> npt.NDArray:
-        return self.continous_ft(k / self.scale) / self.scale
+        return self.scale * self.continous_ft(k / self.stretch) / np.abs(
+            self.stretch)
 
 
 class SquareSignal(AnalysticalFourierSignal):
@@ -42,7 +49,7 @@ class SquareSignal(AnalysticalFourierSignal):
         return y
 
     def continous_ft(self, k: npt.NDArray) -> npt.NDArray:
-        return np.sinc(k / 2 / np.pi)
+        return np.sinc(k / 2 / np.pi) / np.sqrt(2 * np.pi)
 
 
 class TriangleSignal(AnalysticalFourierSignal):
@@ -58,7 +65,7 @@ class TriangleSignal(AnalysticalFourierSignal):
         return y
 
     def continous_ft(self, k: npt.NDArray) -> npt.NDArray:
-        return np.sinc(k / 2 / np.pi)**2
+        return np.sinc(k / 2 / np.pi)**2 / np.sqrt(2 * np.pi)
 
 
 class GaussSignal(AnalysticalFourierSignal):
@@ -67,7 +74,7 @@ class GaussSignal(AnalysticalFourierSignal):
         return np.exp(-x**2)
 
     def continous_ft(self, k: npt.NDArray) -> npt.NDArray:
-        return np.sqrt(np.pi) * np.exp(-(k**2) / (4))
+        return np.sqrt(np.pi) * np.exp(-(k**2) / (4)) / np.sqrt(2 * np.pi)
 
 
 class FFT:
@@ -76,7 +83,7 @@ class FFT:
         self._dx = x[1] - x[0]
         self._x = x
         self._phase_factor = self.dx * np.exp(-1j * self.k * x[0])
-        self._scale_factor = np.sqrt(x.size)
+        self._scale_factor = np.sqrt(x.size / (2 * np.pi))
 
     @property
     def x(self) -> npt.NDArray:
@@ -112,7 +119,7 @@ if __name__ == '__main__':
     n_high = 64
     n_low = 32
     x0 = 1.0
-    signal = SquareSignal(scale=1.0)
+    signal = SquareSignal(stretch=1.0, scale=1.0)
 
     x_high, dx_high = np.linspace(-x0,
                                   x0,
