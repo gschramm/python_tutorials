@@ -242,7 +242,7 @@ class GradientOperator(LinearOperator):
         for i in range(x.ndim):
             g[i, ...] = self.xp.diff(x,
                                      axis=i,
-                                     append=self._xp.take(x, [-1], i))
+                                     append=self.xp.take(x, [-1], i))
 
         return g
 
