@@ -185,7 +185,7 @@ class FFT(LinearOperator):
 
     @property
     def k(self) -> npt.NDArray:
-        return np.fft.fftfreq(self.x.size, d=self.dx) * 2 * np.pi
+        return self.xp.fft.fftfreq(self.x.size, d=self.dx) * 2 * np.pi
 
     @property
     def k_scaled(self) -> npt.NDArray:
@@ -204,12 +204,12 @@ class FFT(LinearOperator):
         return self._adjoint_factor
 
     def forward(self, f: npt.NDArray) -> npt.NDArray:
-        return np.fft.fft(f,
-                          norm='ortho') * self.phase_factor * self.scale_factor
+        return self.xp.fft.fft(
+            f, norm='ortho') * self.phase_factor * self.scale_factor
 
     def adjoint(self, ft: npt.NDArray) -> npt.NDArray:
-        return np.fft.ifft(ft * self.scale_factor / self.phase_factor,
-                           norm='ortho') * self._adjoint_factor
+        return self.xp.fft.ifft(ft * self.scale_factor / self.phase_factor,
+                                norm='ortho') * self._adjoint_factor
 
     def inverse(self, ft: npt.NDArray) -> npt.NDArray:
         return self.adjoint(ft) / (self.scale_factor**2) / self.adjoint_factor

@@ -9,10 +9,10 @@ if __name__ == '__main__':
 
     n_high = 128
     n_low = 64
-    x0 = 1.2
-    signal1 = SquareSignal(stretch=1., scale=1, shift=0.1)
-    signal2 = SquareSignal(stretch=1.5, scale=-0.5, shift=0.1)
-    signal3 = TriangleSignal(stretch=8, scale=0.25, shift=0.1)
+    x0 = 110
+    signal1 = SquareSignal(stretch=1. / x0, scale=1, shift=0)
+    signal2 = SquareSignal(stretch=1.5 / x0, scale=-0.5, shift=0)
+    signal3 = TriangleSignal(stretch=8 / x0, scale=0.25, shift=0)
     signal = CompoundAnalysticalFourierSignal([signal1, signal2, signal3])
 
     x_high, dx_high = np.linspace(-x0,
@@ -63,7 +63,7 @@ if __name__ == '__main__':
 
     ms = 4
 
-    x_super_high = np.linspace(-1, 1, 2048 * 16)
+    x_super_high = np.linspace(-x0, x0, 2048 * 16)
     k_super_high = np.linspace(1.2 * k_high.min(), 1.2 * k_high.max(),
                                2048 * 16)
 
@@ -131,10 +131,10 @@ if __name__ == '__main__':
     ax[2, 2].plot(k_low, F_low.imag, '.', ms=ms, color=plt.cm.tab10(1))
 
     ax[1, 1].set_xlim(k_low.min(), k_low.max())
-    ax[1, 2].set_xlim(k_low.min(), -8)
+    ax[1, 2].set_xlim(k_low.min(), k_low.min() / 6)
 
     ax[2, 1].set_xlim(k_low.min(), k_low.max())
-    ax[2, 2].set_xlim(k_low.min(), -8)
+    ax[2, 2].set_xlim(k_low.min(), k_low.min() / 6)
 
     for k in range(3):
         ax[0, k].set_xlabel("x")
