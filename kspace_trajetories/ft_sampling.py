@@ -111,6 +111,7 @@ class FFT:
         self._x = x
         self._phase_factor = self.dx * np.exp(-1j * self.k * x[0])
         self._scale_factor = np.sqrt(x.size / (2 * np.pi))
+        self._adjoint_factor = 1 / ((x.size / 2)**2)
 
     @property
     def x(self) -> npt.NDArray:
@@ -136,13 +137,20 @@ class FFT:
     def scale_factor(self) -> float:
         return self._scale_factor
 
+    @property
+    def adjoint_factor(self) -> float:
+        return self._adjoint_factor
+
     def forward(self, f: npt.NDArray) -> npt.NDArray:
         return np.fft.fft(f,
                           norm='ortho') * self.phase_factor * self.scale_factor
 
     def adjoint(self, ft: npt.NDArray) -> npt.NDArray:
         return np.fft.ifft(ft * self.scale_factor / self.phase_factor,
-                           norm='ortho')
+                           norm='ortho') * self._adjoint_factor
+
+    def inverse(self, ft: npt.NDArray) -> npt.NDArray:
+        return self.adjoint(ft) / (self.scale_factor**2) / self.adjoint_factor
 
 
 #-----------------------------------------------------------------------------------------------------------------
@@ -197,10 +205,29 @@ if __name__ == '__main__':
     cont_FT_sampled_high = signal.continous_ft(k_high)
     cont_FT_sampled_low = signal.continous_ft(k_low)
 
-    f_recon_high = fft_high_res.adjoint(cont_FT_sampled_high) / (
-        fft_high_res.scale_factor**2)
-    f_recon_low = fft_low_res.adjoint(cont_FT_sampled_low) / (
-        fft_low_res.scale_factor**2)
+    f_recon_high = fft_high_res.inverse(cont_FT_sampled_high)
+    f_recon_low = fft_low_res.inverse(cont_FT_sampled_low)
+
+    #-----------------------------------------------------------------------------------------------------------------
+    #-----------------------------------------------------------------------------------------------------------------
+    # part 3: check adjointness of operators
+    #-----------------------------------------------------------------------------------------------------------------
+    #-----------------------------------------------------------------------------------------------------------------
+
+    np.random.seed(1)
+    model = fft_high_res
+    n = n_high
+
+    x = np.random.rand(n) + 1j * np.random.rand(n)
+    y = np.random.rand(n) + 1j * np.random.rand(n)
+
+    x_fwd = model.forward(x)
+    y_adj = model.adjoint(y)
+
+    ip1 = (np.conj(y) * x_fwd).sum()
+    ip2 = (np.conj(y_adj) * x).sum()
+
+    assert (np.isclose(ip1, ip2))
 
     #-----------------------------------------------------------------------------------------------------------------
     #-----------------------------------------------------------------------------------------------------------------
