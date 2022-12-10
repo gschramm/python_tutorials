@@ -22,8 +22,8 @@ if __name__ == '__main__':
                                   retstep=True)
     x_low, dx_low = np.linspace(-x0, x0, n_low, endpoint=False, retstep=True)
 
-    f_high = signal.signal(x_high)
-    f_low = signal.signal(x_low)
+    f_high = signal.signal(x_high).astype(complex)
+    f_low = signal.signal(x_low).astype(complex)
 
     #-----------------------------------------------------------------------------------------------------------------
     #-----------------------------------------------------------------------------------------------------------------
@@ -69,8 +69,8 @@ if __name__ == '__main__':
 
     fig, ax = plt.subplots(3, 3, figsize=(14, 9), sharey='row')
     ax[0, 0].plot(x_super_high, signal.signal(x_super_high), 'k-', lw=0.5)
-    ax[0, 0].plot(x_high, f_high, 'x', ms=ms, color=plt.cm.tab10(0))
-    ax[0, 0].plot(x_low, f_low, '.', ms=ms, color=plt.cm.tab10(1))
+    ax[0, 0].plot(x_high, f_high.real, 'x', ms=ms, color=plt.cm.tab10(0))
+    ax[0, 0].plot(x_low, f_low.real, '.', ms=ms, color=plt.cm.tab10(1))
 
     ax[0, 1].plot(x_super_high, signal.signal(x_super_high), 'k-', lw=0.5)
     ax[0, 1].plot(x_high,

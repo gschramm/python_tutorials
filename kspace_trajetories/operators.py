@@ -13,8 +13,11 @@ except:
 
 class LinearOperator(abc.ABC):
 
-    def __init__(self, input_shape: tuple[int, ...],
-                 output_shape: tuple[int, ...], xp: types.ModuleType) -> None:
+    def __init__(self,
+                 input_shape: tuple[int, ...],
+                 output_shape: tuple[int, ...],
+                 xp: types.ModuleType,
+                 dtype: type = float) -> None:
         """Linear operator abstract base class that maps real array x to real array y
 
         Parameters
@@ -30,6 +33,12 @@ class LinearOperator(abc.ABC):
         self._input_shape = input_shape
         self._output_shape = output_shape
         self._xp = xp
+        self._dtype = dtype
+
+    @property
+    def dtype(self) -> type:
+        """the data type of the input and output arrays"""
+        return self._dtype
 
     @property
     def input_shape(self) -> tuple[int, ...]:
@@ -92,7 +101,7 @@ class LinearOperator(abc.ABC):
         """
         raise NotImplementedError()
 
-    def adjointness_test(self, verbose=False, padwidth=0) -> None:
+    def adjointness_test(self, verbose=False) -> None:
         """test if adjoint is really the adjoint of forward
 
         Parameters
@@ -100,15 +109,15 @@ class LinearOperator(abc.ABC):
         verbose : bool, optional
             prnt verbose output
         """
-        if padwidth > 0:
-            x = self.xp.pad(
-                self.xp.random.rand(*tuple(x - 2 * padwidth
-                                           for x in self.input_shape)),
-                padwidth).astype(self.xp.float32)
-        else:
-            x = self.xp.random.rand(*self.input_shape).astype(self.xp.float32)
+        x = self.xp.random.rand(*self.input_shape).astype(self.dtype)
+        y = self.xp.random.rand(*self.output_shape).astype(self.dtype)
 
-        y = self.xp.random.rand(*self.output_shape).astype(self.xp.float32)
+        if self.xp.iscomplexobj(x):
+            x += 1j * self.xp.random.rand(*self.input_shape).astype(self.dtype)
+
+        if self.xp.iscomplexobj(y):
+            y += 1j * self.xp.random.rand(*self.output_shape).astype(
+                self.dtype)
 
         x_fwd = self.forward(x)
         y_back = self.adjoint(y)
@@ -136,7 +145,10 @@ class LinearOperator(abc.ABC):
             the estimated norm
         """
 
-        x = self.xp.random.rand(*self._input_shape).astype(self.xp.float32)
+        x = self.xp.random.rand(*self._input_shape).astype(self.dtype)
+
+        if self.xp.iscomplexobj(x):
+            x += 1j * self.xp.random.rand(*self.input_shape).astype(self.dtype)
 
         for i in range(num_iter):
             x = self.adjoint(self.forward(x))
@@ -149,8 +161,14 @@ class LinearOperator(abc.ABC):
 class FFT(LinearOperator):
     """ fast fourier transform operator matched to replicated continous FT"""
 
-    def __init__(self, x: npt.NDArray, xp: types.ModuleType = np) -> None:
-        super().__init__(input_shape=x.shape, output_shape=x.shape, xp=xp)
+    def __init__(self,
+                 x: npt.NDArray,
+                 xp: types.ModuleType = np,
+                 dtype=complex) -> None:
+        super().__init__(input_shape=x.shape,
+                         output_shape=x.shape,
+                         xp=xp,
+                         dtype=dtype)
         self._dx = x[1] - x[0]
         self._x = x
         self._phase_factor = self.dx * np.exp(-1j * self.k * x[0])
