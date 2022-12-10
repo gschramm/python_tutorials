@@ -203,13 +203,57 @@ class FFT(LinearOperator):
     def adjoint_factor(self) -> float:
         return self._adjoint_factor
 
-    def forward(self, f: npt.NDArray) -> npt.NDArray:
+    def forward(self, x: npt.NDArray) -> npt.NDArray:
         return self.xp.fft.fft(
-            f, norm='ortho') * self.phase_factor * self.scale_factor
+            x, norm='ortho') * self.phase_factor * self.scale_factor
 
-    def adjoint(self, ft: npt.NDArray) -> npt.NDArray:
-        return self.xp.fft.ifft(ft * self.scale_factor / self.phase_factor,
+    def adjoint(self, y: npt.NDArray) -> npt.NDArray:
+        return self.xp.fft.ifft(y * self.scale_factor / self.phase_factor,
                                 norm='ortho') * self._adjoint_factor
 
-    def inverse(self, ft: npt.NDArray) -> npt.NDArray:
-        return self.adjoint(ft) / (self.scale_factor**2) / self.adjoint_factor
+    def inverse(self, y: npt.NDArray) -> npt.NDArray:
+        return self.adjoint(y) / (self.scale_factor**2) / self.adjoint_factor
+
+
+class GradientOperator(LinearOperator):
+    """finite difference gradient operator for real or complex arrays"""
+
+    def __init__(self,
+                 input_shape: tuple[int, ...],
+                 xp: types.ModuleType = np,
+                 dtype: type = float) -> None:
+        """_summary_
+
+        Parameters
+        ----------
+        input_shape : tuple[int, ...]
+            the input array shape
+        xp : types.ModuleType
+            the array module (numpy or cupy)
+        dtype : type, optional, by default numpy
+            data type of the input and output (float or complex), by default float
+        """
+
+        output_shape = (len(input_shape), ) + input_shape
+        super().__init__(input_shape, output_shape, xp=xp, dtype=dtype)
+
+    def forward(self, x):
+        g = self.xp.zeros(self.output_shape, dtype=x.dtype)
+        for i in range(x.ndim):
+            g[i, ...] = self.xp.diff(x,
+                                     axis=i,
+                                     append=self._xp.take(x, [-1], i))
+
+        return g
+
+    def adjoint(self, y):
+        d = self.xp.zeros(self.input_shape, dtype=y.dtype)
+
+        for i in range(y.shape[0]):
+            tmp = y[i, ...]
+            sl = [slice(None)] * y.shape[0]
+            sl[i] = slice(-1, None)
+            tmp[tuple(sl)] = 0
+            d -= self.xp.diff(tmp, axis=i, prepend=0)
+
+        return d
