@@ -8,9 +8,13 @@ import matplotlib.pyplot as plt
 class AnalysticalFourierSignal:
     """abstract base class for 1D signals where the analytical Fourier transform exists"""
 
-    def __init__(self, scale: float = 1., stretch: float = 1.):
+    def __init__(self,
+                 scale: float = 1.,
+                 stretch: float = 1.,
+                 shift: float = 0.):
         self._scale = scale
         self._stretch = stretch
+        self._shift = shift
 
     @property
     def scale(self) -> float:
@@ -19,6 +23,10 @@ class AnalysticalFourierSignal:
     @property
     def stretch(self) -> float:
         return self._stretch
+
+    @property
+    def shift(self) -> float:
+        return self._shift
 
     @abc.abstractmethod
     def signal(self, x: npt.NDArray) -> npt.NDArray:
@@ -29,11 +37,11 @@ class AnalysticalFourierSignal:
         raise NotImplementedError
 
     def signal_scaled(self, x: npt.NDArray) -> npt.NDArray:
-        return self.scale * self.signal(x * self.stretch)
+        return self.scale * self.signal((x - self.shift) * self.stretch)
 
     def continous_ft_scaled(self, k: npt.NDArray) -> npt.NDArray:
-        return self.scale * self.continous_ft(k / self.stretch) / np.abs(
-            self.stretch)
+        return self.scale * np.exp(-1j * self.shift * k) * self.continous_ft(
+            k / self.stretch) / np.abs(self.stretch)
 
 
 class SquareSignal(AnalysticalFourierSignal):
@@ -116,10 +124,11 @@ class FFT:
 
 if __name__ == '__main__':
 
-    n_high = 64
+    n_high = 128
     n_low = 32
     x0 = 1.0
-    signal = SquareSignal(stretch=1.0, scale=1.0)
+    #signal = GaussSignal(stretch=10., scale=0.5, shift=0.4)
+    signal = SquareSignal(stretch=1.2, scale=0.5, shift=0.4)
 
     x_high, dx_high = np.linspace(-x0,
                                   x0,
