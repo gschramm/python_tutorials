@@ -1,7 +1,16 @@
 import abc
+import types
 import functools
 import numpy as np
 import numpy.typing as npt
+
+try:
+    import cupy as cp
+    import cupy.typing as cpt
+except:
+    import warnings
+    import numpy as np
+    import numpy.typing as cpt
 
 
 class AnalysticalFourierSignal(abc.ABC):
@@ -10,10 +19,16 @@ class AnalysticalFourierSignal(abc.ABC):
     def __init__(self,
                  scale: float = 1.,
                  stretch: float = 1.,
-                 shift: float = 0.):
+                 shift: float = 0.,
+                 xp: types.ModuleType = np):
         self._scale = scale
         self._stretch = stretch
         self._shift = shift
+        self._xp = xp
+
+    @property
+    def xp(self) -> types.ModuleType:
+        return self._xp
 
     @property
     def scale(self) -> float:
@@ -39,16 +54,17 @@ class AnalysticalFourierSignal(abc.ABC):
         return self.scale * self._signal((x - self.shift) * self.stretch)
 
     def continous_ft(self, k: npt.NDArray) -> npt.NDArray:
-        return self.scale * np.exp(-1j * self.shift * k) * self._continous_ft(
-            k / self.stretch) / np.abs(self.stretch)
+        return self.scale * self.xp.exp(
+            -1j * self.shift * k) * self._continous_ft(
+                k / self.stretch) / self.xp.abs(self.stretch)
 
 
 class SquareSignal(AnalysticalFourierSignal):
 
     def _signal(self, x: npt.NDArray) -> npt.NDArray:
-        y = np.zeros_like(x)
-        ipos = np.where(np.logical_and(x >= 0, x < 0.5))
-        ineg = np.where(np.logical_and(x >= -0.5, x < 0))
+        y = self.xp.zeros_like(x)
+        ipos = self.xp.where(self.xp.logical_and(x >= 0, x < 0.5))
+        ineg = self.xp.where(self.xp.logical_and(x >= -0.5, x < 0))
 
         y[ipos] = 1
         y[ineg] = 1
@@ -56,15 +72,15 @@ class SquareSignal(AnalysticalFourierSignal):
         return y
 
     def _continous_ft(self, k: npt.NDArray) -> npt.NDArray:
-        return np.sinc(k / 2 / np.pi) / np.sqrt(2 * np.pi)
+        return self.xp.sinc(k / 2 / self.xp.pi) / self.xp.sqrt(2 * self.xp.pi)
 
 
 class TriangleSignal(AnalysticalFourierSignal):
 
     def _signal(self, x: npt.NDArray) -> npt.NDArray:
-        y = np.zeros_like(x)
-        ipos = np.where(np.logical_and(x >= 0, x < 1))
-        ineg = np.where(np.logical_and(x >= -1, x < 0))
+        y = self.xp.zeros_like(x)
+        ipos = self.xp.where(self.xp.logical_and(x >= 0, x < 1))
+        ineg = self.xp.where(self.xp.logical_and(x >= -1, x < 0))
 
         y[ipos] = 1 - x[ipos]
         y[ineg] = 1 + x[ineg]
@@ -72,16 +88,18 @@ class TriangleSignal(AnalysticalFourierSignal):
         return y
 
     def _continous_ft(self, k: npt.NDArray) -> npt.NDArray:
-        return np.sinc(k / 2 / np.pi)**2 / np.sqrt(2 * np.pi)
+        return self.xp.sinc(k / 2 / self.xp.pi)**2 / self.xp.sqrt(
+            2 * self.xp.pi)
 
 
 class GaussSignal(AnalysticalFourierSignal):
 
     def _signal(self, x: npt.NDArray) -> npt.NDArray:
-        return np.exp(-x**2)
+        return self.xp.exp(-x**2)
 
     def _continous_ft(self, k: npt.NDArray) -> npt.NDArray:
-        return np.sqrt(np.pi) * np.exp(-(k**2) / (4)) / np.sqrt(2 * np.pi)
+        return self.xp.sqrt(self.xp.pi) * self.xp.exp(
+            -(k**2) / (4)) / self.xp.sqrt(2 * self.xp.pi)
 
 
 class CompoundAnalysticalFourierSignal():
@@ -100,3 +118,153 @@ class CompoundAnalysticalFourierSignal():
     def continous_ft(self, x: npt.NDArray) -> npt.NDArray:
         return functools.reduce(lambda a, b: a + b,
                                 [z.continous_ft(x) for z in self.signals])
+
+
+#-----------------------------------------------------------------------------------
+#-----------------------------------------------------------------------------------
+#-----------------------------------------------------------------------------------
+#-----------------------------------------------------------------------------------
+#-----------------------------------------------------------------------------------
+
+
+class Functional(abc.ABC):
+    """abstract base class for a functional f(scale *(x - shift))"""
+
+    def __init__(self,
+                 xp: types.ModuleType,
+                 scale: float = 1.,
+                 shift: float | npt.NDArray | cpt.NDArray = 0.):
+        self._xp = xp
+        self._scale = scale  # positive scale factor (g(x) = scale * f(x))
+        self._shift = shift
+
+    @property
+    def scale(self) -> float:
+        return self._scale
+
+    @property
+    def shift(self) -> float | npt.NDArray | cpt.NDArray:
+        return self._shift
+
+    @property
+    def xp(self) -> types.ModuleType:
+        return self._xp
+
+    def __call__(self, x: npt.NDArray | cpt.NDArray) -> float:
+        return self._scale * self._call(x - self.shift)
+
+    @abc.abstractmethod
+    def _call(self, x: npt.NDArray | cpt.NDArray) -> float:
+        raise NotImplementedError
+
+
+class SmoothFunctional(Functional):
+    """smooth functional with gradient"""
+
+    @abc.abstractmethod
+    def _gradient(self,
+                  x: npt.NDArray | cpt.NDArray) -> npt.NDArray | cpt.NDArray:
+        """gradient of the functional"""
+        raise NotImplementedError
+
+    def gradient(self,
+                 x: npt.NDArray | cpt.NDArray) -> npt.NDArray | cpt.NDArray:
+        return self.scale * self._gradient(x - self.shift)
+
+
+class FunctionalWithProx(Functional):
+
+    @abc.abstractmethod
+    def _prox(
+            self, x: npt.NDArray | cpt.NDArray,
+            sigma: float | npt.NDArray | cpt.NDArray
+    ) -> npt.NDArray | cpt.NDArray:
+        """proximal operator of the functional"""
+        raise NotImplementedError
+
+    def prox(
+            self, x: npt.NDArray | cpt.NDArray,
+            sigma: float | npt.NDArray | cpt.NDArray
+    ) -> npt.NDArray | cpt.NDArray:
+        return self._prox(x - self.shift,
+                          sigma=self.scale * sigma) + self.shift
+
+    def prox_convex_dual(
+            self, x: npt.NDArray | cpt.NDArray,
+            sigma: float | npt.NDArray | cpt.NDArray
+    ) -> npt.NDArray | cpt.NDArray:
+        # Moreau indentity
+        return x - sigma * self.prox(x / sigma, sigma=1. / sigma)
+
+
+class SquaredL2Norm(SmoothFunctional, FunctionalWithProx):
+    """squared L2 norm times 0.5"""
+
+    def _call(self, x: npt.NDArray | cpt.NDArray) -> float:
+        return 0.5 * (self.xp.conj(x) * x).sum().real
+
+    def _prox(
+            self, x: npt.NDArray | cpt.NDArray,
+            sigma: float | npt.NDArray | cpt.NDArray
+    ) -> npt.NDArray | cpt.NDArray:
+        return x / (1 + sigma)
+
+    def _gradient(self,
+                  x: npt.NDArray | cpt.NDArray) -> npt.NDArray | cpt.NDArray:
+        return x
+
+
+#class FunctionalWithDualProx(Functional):
+#
+#    @abc.abstractmethod
+#    def _prox_convex_dual(
+#            self, x: npt.NDArray | cpt.NDArray,
+#            sigma: float | npt.NDArray | cpt.NDArray
+#    ) -> npt.NDArray | cpt.NDArray:
+#        """proximal operator of the convex dual of the functional"""
+#        raise NotImplementedError
+#
+#    def prox_convex_dual(
+#            self, x: npt.NDArray | cpt.NDArray,
+#            sigma: float | npt.NDArray | cpt.NDArray
+#    ) -> npt.NDArray | cpt.NDArray:
+#        return self.scale * self._prox_convex_dual(x / self.scale,
+#                                                   sigma=sigma / self.scale)
+#
+#    def prox(
+#            self, x: npt.NDArray | cpt.NDArray,
+#            sigma: float | npt.NDArray | cpt.NDArray
+#    ) -> npt.NDArray | cpt.NDArray:
+#        # Moreau indentity
+#        return x - sigma * self.prox_convex_dual(x / sigma, sigma=1. / sigma)
+
+#class L2L1Norm(FunctionalWithDualProx):
+#    """sum of pointwise Eucliean norms (L2L1 norm)"""
+#
+#    def _call(self, x: npt.NDArray | cpt.NDArray) -> float:
+#        return self.xp.linalg.norm(x, axis=0).sum()
+#
+#    def _prox_convex_dual(
+#            self, x: npt.NDArray | cpt.NDArray,
+#            sigma: float | npt.NDArray | cpt.NDArray
+#    ) -> npt.NDArray | cpt.NDArray:
+#        gnorm = self._xp.linalg.norm(x, axis=0)
+#        r = x / self._xp.clip(gnorm, 1, None)
+#
+#        return r
+
+if __name__ == "__main__":
+    np.random.seed(1)
+    n = 3
+    num_iter = 50
+
+    shift = 10 * np.random.rand(n)
+    scale = abs(np.random.rand(1)[0])
+
+    f = SquaredL2Norm(np, scale=scale, shift=shift)
+
+    x = np.zeros(n)
+
+    for i in range(num_iter):
+        x = f.prox(x, sigma=1.2)
+        print(i, x - shift)
