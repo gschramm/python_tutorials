@@ -175,6 +175,23 @@ class SmoothFunctional(Functional):
 class FunctionalWithProx(Functional):
 
     @abc.abstractmethod
+    def prox(
+            self, x: npt.NDArray | cpt.NDArray,
+            sigma: float | npt.NDArray | cpt.NDArray
+    ) -> npt.NDArray | cpt.NDArray:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def prox_convex_dual(
+            self, x: npt.NDArray | cpt.NDArray,
+            sigma: float | npt.NDArray | cpt.NDArray
+    ) -> npt.NDArray | cpt.NDArray:
+        raise NotImplementedError
+
+
+class FunctionalWithPrimalProx(Functional):
+
+    @abc.abstractmethod
     def _prox(
             self, x: npt.NDArray | cpt.NDArray,
             sigma: float | npt.NDArray | cpt.NDArray
@@ -197,7 +214,35 @@ class FunctionalWithProx(Functional):
         return x - sigma * self.prox(x / sigma, sigma=1. / sigma)
 
 
-class SquaredL2Norm(SmoothFunctional, FunctionalWithProx):
+class FunctionalWithDualProx(Functional):
+
+    @abc.abstractmethod
+    def _prox_convex_dual(
+            self, x: npt.NDArray | cpt.NDArray,
+            sigma: float | npt.NDArray | cpt.NDArray
+    ) -> npt.NDArray | cpt.NDArray:
+        """proximal operator of the functional"""
+        raise NotImplementedError
+
+    def prox_convex_dual(
+            self, x: npt.NDArray | cpt.NDArray,
+            sigma: float | npt.NDArray | cpt.NDArray
+    ) -> npt.NDArray | cpt.NDArray:
+        if self.shift != 0:
+            raise ValueError
+
+        return self.scale * self._prox_convex_dual(x / self.scale,
+                                                   sigma=sigma / self.scale)
+
+    def prox(
+            self, x: npt.NDArray | cpt.NDArray,
+            sigma: float | npt.NDArray | cpt.NDArray
+    ) -> npt.NDArray | cpt.NDArray:
+        # Moreau indentity
+        return x - sigma * self.prox_convex_dual(x / sigma, sigma=1. / sigma)
+
+
+class SquaredL2Norm(SmoothFunctional, FunctionalWithPrimalProx):
     """squared L2 norm times 0.5"""
 
     def _call(self, x: npt.NDArray | cpt.NDArray) -> float:
@@ -214,44 +259,21 @@ class SquaredL2Norm(SmoothFunctional, FunctionalWithProx):
         return x
 
 
-#class FunctionalWithDualProx(Functional):
-#
-#    @abc.abstractmethod
-#    def _prox_convex_dual(
-#            self, x: npt.NDArray | cpt.NDArray,
-#            sigma: float | npt.NDArray | cpt.NDArray
-#    ) -> npt.NDArray | cpt.NDArray:
-#        """proximal operator of the convex dual of the functional"""
-#        raise NotImplementedError
-#
-#    def prox_convex_dual(
-#            self, x: npt.NDArray | cpt.NDArray,
-#            sigma: float | npt.NDArray | cpt.NDArray
-#    ) -> npt.NDArray | cpt.NDArray:
-#        return self.scale * self._prox_convex_dual(x / self.scale,
-#                                                   sigma=sigma / self.scale)
-#
-#    def prox(
-#            self, x: npt.NDArray | cpt.NDArray,
-#            sigma: float | npt.NDArray | cpt.NDArray
-#    ) -> npt.NDArray | cpt.NDArray:
-#        # Moreau indentity
-#        return x - sigma * self.prox_convex_dual(x / sigma, sigma=1. / sigma)
+class L2L1Norm(FunctionalWithDualProx):
+    """sum of pointwise Eucliean norms (L2L1 norm)"""
 
-#class L2L1Norm(FunctionalWithDualProx):
-#    """sum of pointwise Eucliean norms (L2L1 norm)"""
-#
-#    def _call(self, x: npt.NDArray | cpt.NDArray) -> float:
-#        return self.xp.linalg.norm(x, axis=0).sum()
-#
-#    def _prox_convex_dual(
-#            self, x: npt.NDArray | cpt.NDArray,
-#            sigma: float | npt.NDArray | cpt.NDArray
-#    ) -> npt.NDArray | cpt.NDArray:
-#        gnorm = self._xp.linalg.norm(x, axis=0)
-#        r = x / self._xp.clip(gnorm, 1, None)
-#
-#        return r
+    def _call(self, x: npt.NDArray | cpt.NDArray) -> float:
+        return self.xp.linalg.norm(x, axis=0).sum()
+
+    def _prox_convex_dual(
+            self, x: npt.NDArray | cpt.NDArray,
+            sigma: float | npt.NDArray | cpt.NDArray
+    ) -> npt.NDArray | cpt.NDArray:
+        gnorm = self._xp.linalg.norm(x, axis=0)
+        r = x / self._xp.clip(gnorm, 1, None)
+
+        return r
+
 
 if __name__ == "__main__":
     np.random.seed(1)

@@ -2,7 +2,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-from functions import SquareSignal, TriangleSignal, GaussSignal, CompoundAnalysticalFourierSignal, SquaredL2Norm
+from functions import SquareSignal, TriangleSignal, GaussSignal, CompoundAnalysticalFourierSignal, SquaredL2Norm, L2L1Norm
 from operators import FFT, GradientOperator
 from algorithms import PDHG
 
@@ -40,7 +40,8 @@ if __name__ == '__main__':
     data_distance = SquaredL2Norm(xp, scale=1.0, shift=data)
 
     prior_operator = GradientOperator(x.shape, xp=xp)
-    prior_norm = SquaredL2Norm(xp, scale=1e1)
+    #prior_norm = SquaredL2Norm(xp, scale=1e1)
+    prior_norm = L2L1Norm(xp, scale=2e0)
 
     fft_norm = fft.norm(num_iter=200)
 
@@ -50,7 +51,7 @@ if __name__ == '__main__':
                 tau=1. / fft_norm,
                 prior_operator=prior_operator,
                 prior_functional=prior_norm)
-    pdhg.run(1000, verbose=False, calculate_cost=True)
+    pdhg.run(2000, verbose=False, calculate_cost=True)
 
     #-----------------------------------------------------------------------------------------------------------------
     #-----------------------------------------------------------------------------------------------------------------
@@ -61,11 +62,15 @@ if __name__ == '__main__':
     xx = xp.linspace(-x0, x0, 1000, endpoint=False)
     kk = xp.linspace(k.min(), k.max(), 1000, endpoint=False)
 
-    fig, ax = plt.subplots(1, 2, figsize=(8, 4))
+    fig, ax = plt.subplots(1, 4, figsize=(16, 4))
     ax[0].plot(xx, signal.signal(xx).real, 'k-', lw=0.5)
     ax[0].plot(x, recon1.real, '.-', lw=0.3)
     ax[0].plot(x, pdhg.x.real, '.-', lw=0.3)
-    ax[1].plot(kk, signal.continous_ft(kk).real, 'k-', lw=0.5)
-    ax[1].plot(k, data.real, '.')
+    ax[1].plot(xx, signal.signal(xx).imag, 'k-', lw=0.5)
+    ax[1].plot(x, recon1.imag, '.-', lw=0.3)
+    ax[1].plot(x, pdhg.x.imag, '.-', lw=0.3)
+    ax[2].plot(kk, signal.continous_ft(kk).real, 'k-', lw=0.5)
+    ax[2].plot(k, data.real, '.')
+    ax[3].plot(pdhg.cost[10:])
     fig.tight_layout()
     fig.show()
