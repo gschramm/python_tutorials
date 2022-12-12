@@ -6,15 +6,18 @@ from functions import SquareSignal, TriangleSignal, GaussSignal, CompoundAnalyst
 from operators import FFT, GradientOperator
 from algorithms import PDHG
 
+def t_of_k(k):
+    return 40 * np.abs(k) / 0.91391
+
 if __name__ == '__main__':
 
     xp = np
 
     n = 128
     x0 = 110.
-    noise_level = 0.2
+    noise_level = 0.
     num_iter = 2000
-    beta = 3e0
+    beta = 2e0
     prior = 'L1L2Norm'
 
     signal_csf1 = SquareSignal(stretch=20. / x0, scale=1, shift=0.725*x0, T2star=50)
@@ -50,7 +53,10 @@ if __name__ == '__main__':
     #-----------------------------------------------------------------------------------------------------------------
     #-----------------------------------------------------------------------------------------------------------------
 
-    noise_free_data = signal.continous_ft(k)
+    noise_free_data = xp.zeros(n, dtype = xp.complex128)
+
+    for i, kk in enumerate(k):
+        noise_free_data[i] = signal.continous_ft(kk, t=t_of_k(kk))
 
     data = noise_free_data.copy() + noise_level * xp.random.randn(
         *noise_free_data.shape) + 1j * noise_level * xp.random.randn(
