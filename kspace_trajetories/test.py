@@ -11,17 +11,27 @@ if __name__ == '__main__':
     xp = np
 
     n = 128
-    x0 = 110
-    noise_level = 0.3
+    x0 = 110.
+    noise_level = 0.2
     num_iter = 2000
-    beta = 4e1
-    prior = 'SquaredL2Norm'
+    beta = 3e0
+    prior = 'L1L2Norm'
 
-    signal1 = SquareSignal(stretch=1. / x0, scale=1, shift=0)
-    signal2 = SquareSignal(stretch=1.5 / x0, scale=-0.5, shift=0)
-    #signal3 = TriangleSignal(stretch=8 / x0, scale=0.25, shift=0)
-    signal3 = SquareSignal(stretch=8 / x0, scale=0.25, shift=0)
-    signal = CompoundAnalysticalFourierSignal([signal1, signal2, signal3])
+    signal_csf1 = SquareSignal(stretch=20. / x0, scale=1, shift=0.725*x0, T2star=50)
+    signal_csf2 = SquareSignal(stretch=20. / x0, scale=1, shift=-0.725*x0, T2star=50)
+    signal_gm1 = SquareSignal(stretch=5. / x0, scale=0.5, shift=0.6*x0, T2star=9)
+    signal_gm2 = SquareSignal(stretch=5. / x0, scale=0.5, shift=-0.6*x0, T2star=9)
+    signal_wm = SquareSignal(stretch=1. / x0, scale=0.45, shift=0, T2star=8)
+    signal_lesion = SquareSignal(stretch=10. / x0, scale=0.25, shift=0, T2star=8)
+    signal = CompoundAnalysticalFourierSignal([signal_csf1, signal_csf2, signal_gm1, signal_gm2, signal_wm, signal_lesion])
+
+    #xx = np.linspace(-x0,x0,1000)
+    #fig, ax = plt.subplots(1,2, figsize=(8,4))
+    #ax[0].plot(xx, signal.signal(xx, t = 0))
+    #ax[0].plot(xx, signal.signal(xx, t = 10))
+    #ax[0].plot(xx, signal.signal(xx, t = 40))
+    #fig.tight_layout()
+    #fig.show()
 
     x, dx = xp.linspace(-x0, x0, n, endpoint=False, retstep=True)
 

@@ -20,11 +20,17 @@ class AnalysticalFourierSignal(abc.ABC):
                  scale: float = 1.,
                  stretch: float = 1.,
                  shift: float = 0.,
-                 xp: types.ModuleType = np):
+                 xp: types.ModuleType = np,
+                 T2star: float = 10.):
         self._scale = scale
         self._stretch = stretch
         self._shift = shift
         self._xp = xp
+        self._T2star = T2star
+
+    @property
+    def T2star(self) -> float:
+        return self._T2star
 
     @property
     def xp(self) -> types.ModuleType:
@@ -50,11 +56,11 @@ class AnalysticalFourierSignal(abc.ABC):
     def _continous_ft(self, k: npt.NDArray) -> npt.NDArray:
         raise NotImplementedError
 
-    def signal(self, x: npt.NDArray) -> npt.NDArray:
-        return self.scale * self._signal((x - self.shift) * self.stretch)
+    def signal(self, x: npt.NDArray, t: float = 0) -> npt.NDArray:
+        return self.xp.exp(-t/self.T2star) * self.scale * self._signal((x - self.shift) * self.stretch)
 
-    def continous_ft(self, k: npt.NDArray) -> npt.NDArray:
-        return self.scale * self.xp.exp(
+    def continous_ft(self, k: npt.NDArray, t: float = 0) -> npt.NDArray:
+        return self.xp.exp(-t/self.T2star) * self.scale * self.xp.exp(
             -1j * self.shift * k) * self._continous_ft(
                 k / self.stretch) / self.xp.abs(self.stretch)
 
@@ -111,13 +117,13 @@ class CompoundAnalysticalFourierSignal():
     def signals(self) -> list[AnalysticalFourierSignal]:
         return self._signals
 
-    def signal(self, x: npt.NDArray) -> npt.NDArray:
+    def signal(self, x: npt.NDArray, t: float = 0) -> npt.NDArray:
         return functools.reduce(lambda a, b: a + b,
-                                [z.signal(x) for z in self.signals])
+                                [z.signal(x, t=t) for z in self.signals])
 
-    def continous_ft(self, x: npt.NDArray) -> npt.NDArray:
+    def continous_ft(self, x: npt.NDArray, t: float = 0) -> npt.NDArray:
         return functools.reduce(lambda a, b: a + b,
-                                [z.continous_ft(x) for z in self.signals])
+                                [z.continous_ft(x, t=t) for z in self.signals])
 
 
 #-----------------------------------------------------------------------------------
