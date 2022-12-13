@@ -1,5 +1,7 @@
 """script to understand sampliong of fourier space and discrete FT better"""
+import abc
 import numpy as np
+import numpy.typing as npt
 import matplotlib.pyplot as plt
 
 from functions import SquareSignal, TriangleSignal, GaussSignal, CompoundAnalysticalFourierSignal, SquaredL2Norm, L2L1Norm
@@ -11,14 +13,37 @@ def t_of_k(k, factor: float = 1.):
     return factor * 40 * np.abs(k) / 0.91391
 
 
-def mse(x, y):
-    diff = x - y
-    return (np.conj(diff) * diff).sum().real
+class DiffMetric(abc.ABC):
+
+    def __init__(self, y: npt.NDArray, weights=None) -> None:
+        self._y = y
+        self._weights = None
+
+    @abc.abstractmethod
+    def _call_from_diff(self, d: npt.NDArray) -> float:
+        raise NotImplementedError
+
+    def _diff(self, x: npt.NDArray) -> npt.NDArray:
+        return x - self._y
+
+    def __call__(self, x: npt.NDArray) -> float:
+        diff = self._diff(x)
+        if self._weights is not None:
+            diff *= self._weights
+
+        return self._call_from_diff(diff)
 
 
-def mae(x, y):
-    diff = x - y
-    return np.abs(diff).sum()
+class MSE(DiffMetric):
+
+    def _call_from_diff(self, d: npt.NDArray) -> float:
+        return (np.conj(d) * d).sum().real
+
+
+class MAE(DiffMetric):
+
+    def _call_from_diff(self, d: npt.NDArray) -> float:
+        return np.abs(d).sum()
 
 
 if __name__ == '__main__':
@@ -35,7 +60,7 @@ if __name__ == '__main__':
     #prior = 'SquaredL2Norm'
     #betas = [1e1, 1e2, 1e3]
     T2star_factor = 1.
-    readout_time_factor = 1. / 8
+    readout_time_factor = 1. / 4
     seed = 2
 
     #-------------------------------------------------------------------
@@ -146,14 +171,14 @@ if __name__ == '__main__':
     # metrics
     #-----------------------------------------------------------------------------------------------------------------
     #-----------------------------------------------------------------------------------------------------------------
-
-    metrics_dict = dict(MSE=mse, MAE=mae)
+    s_true = signal.signal(x)
+    weights = (s_true.real > 0).astype(np.float64)
+    metrics_dict = dict(MSE=MSE(y=s_true, weights=weights),
+                        MAE=MAE(y=s_true, weights=weights))
     results = {}
 
     for key, metric in metrics_dict.items():
-        results[key] = [
-            metric(recon, signal.signal(x)) for recon in pdhg_recons
-        ]
+        results[key] = [metric(recon) for recon in pdhg_recons]
 
     #-----------------------------------------------------------------------------------------------------------------
     #-----------------------------------------------------------------------------------------------------------------
