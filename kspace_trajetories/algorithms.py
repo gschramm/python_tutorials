@@ -7,7 +7,7 @@ except:
     import numpy as np
     import numpy.typing as cpt
 
-from functions import FunctionalWithProx
+from functions import ConvexFunctionalWithProx
 from operators import LinearOperator
 
 
@@ -17,23 +17,23 @@ class PDHG:
 
     def __init__(self,
                  data_operator: LinearOperator,
-                 data_distance: FunctionalWithProx,
+                 data_distance: ConvexFunctionalWithProx,
                  sigma: float,
                  tau: float,
                  theta: float = 0.999,
                  prior_operator: LinearOperator | None = None,
-                 prior_functional: FunctionalWithProx | None = None,
-                 g_functional: FunctionalWithProx | None = None) -> None:
+                 prior_functional: ConvexFunctionalWithProx | None = None,
+                 g_functional: ConvexFunctionalWithProx | None = None) -> None:
         """
         Parameters
         ----------
         data_operator : operators.LinearOperator
             operator mapping current image to expected data
-        data_distance : functionals.FunctionalWithDualProx
+        data_distance : functionals.ConvexFunctionalWithProx
             norm applied to (expected data - data)
         prior_operator : operators.LinearOperator
             prior operator
-        prior_functional : functionals.FunctionalWithDualProx
+        prior_functional : functionals.ConvexFunctionalWithProx
             prior norm
         sigma : float
             primal step size 
@@ -41,7 +41,7 @@ class PDHG:
             dual step size 
         theta : float, optional
             theta parameter, by default 0.999
-        g_functional : None | functionals.FunctionalWithProx
+        g_functional : None | functionals.ConvexFunctionalWithProx
             the G functional
         """
 

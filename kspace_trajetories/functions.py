@@ -57,10 +57,11 @@ class AnalysticalFourierSignal(abc.ABC):
         raise NotImplementedError
 
     def signal(self, x: npt.NDArray, t: float = 0) -> npt.NDArray:
-        return self.xp.exp(-t/self.T2star) * self.scale * self._signal((x - self.shift) * self.stretch)
+        return self.xp.exp(-t / self.T2star) * self.scale * self._signal(
+            (x - self.shift) * self.stretch)
 
     def continous_ft(self, k: npt.NDArray, t: float = 0) -> npt.NDArray:
-        return self.xp.exp(-t/self.T2star) * self.scale * self.xp.exp(
+        return self.xp.exp(-t / self.T2star) * self.scale * self.xp.exp(
             -1j * self.shift * k) * self._continous_ft(
                 k / self.stretch) / self.xp.abs(self.stretch)
 
@@ -134,7 +135,7 @@ class CompoundAnalysticalFourierSignal():
 
 
 class Functional(abc.ABC):
-    """abstract base class for a functional f(scale *(x - shift))"""
+    """abstract base class for a functional g(x) =  scale * f(x - shift)"""
 
     def __init__(self,
                  xp: types.ModuleType,
@@ -156,35 +157,45 @@ class Functional(abc.ABC):
     def xp(self) -> types.ModuleType:
         return self._xp
 
-    def __call__(self, x: npt.NDArray | cpt.NDArray) -> float:
-        return self._scale * self._call(x - self.shift)
-
     @abc.abstractmethod
-    def _call(self, x: npt.NDArray | cpt.NDArray) -> float:
+    def _call_f(self, x: npt.NDArray | cpt.NDArray) -> float:
+        """f(x)"""
         raise NotImplementedError
+
+    def __call__(self, x: npt.NDArray | cpt.NDArray) -> float:
+        """g(x) = scale * f(x - shift)"""
+        return self._scale * self._call_f(x - self.shift)
 
 
 class SmoothFunctional(Functional):
-    """smooth functional with gradient"""
+    """smooth functional  g(x) =  scale * f(x - shift) where gradient of f(x) is known"""
 
     @abc.abstractmethod
-    def _gradient(self,
-                  x: npt.NDArray | cpt.NDArray) -> npt.NDArray | cpt.NDArray:
-        """gradient of the functional"""
+    def _gradient_f(self,
+                    x: npt.NDArray | cpt.NDArray) -> npt.NDArray | cpt.NDArray:
+        """gradient of f(x)"""
         raise NotImplementedError
 
     def gradient(self,
                  x: npt.NDArray | cpt.NDArray) -> npt.NDArray | cpt.NDArray:
-        return self.scale * self._gradient(x - self.shift)
+        """gradient of g(x)"""
+        return self.scale * self._gradient_f(x - self.shift)
 
 
-class FunctionalWithProx(Functional):
+class ConvexFunctionalWithProx(Functional):
+    """abstract class for functional g(x) =  scale * f(x - shift) 
+       where either prox_f^sigma or prox_f*^sigma is known (analytically)
+
+       if either of the two proxes is known, we can calculate prox_g^sigma and prox_g*^sigma
+       f*/g* are the convex dual functions of g/f
+    """
 
     @abc.abstractmethod
     def prox(
             self, x: npt.NDArray | cpt.NDArray,
             sigma: float | npt.NDArray | cpt.NDArray
     ) -> npt.NDArray | cpt.NDArray:
+        """prox_g^sigma"""
         raise NotImplementedError
 
     @abc.abstractmethod
@@ -192,107 +203,146 @@ class FunctionalWithProx(Functional):
             self, x: npt.NDArray | cpt.NDArray,
             sigma: float | npt.NDArray | cpt.NDArray
     ) -> npt.NDArray | cpt.NDArray:
+        """prox_g*^sigma"""
         raise NotImplementedError
 
 
-class FunctionalWithPrimalProx(Functional):
+class ConvexFunctionalWithPrimalProx(Functional):
+    """abstract class for functional g(x) =  scale * f(x - shift) 
+       where prox_f^sigma is known (analytically)
+
+       we can calculate prox_g*^sigma using Moreau's identity
+       f*/g* are the convex dual functions of g/f
+    """
 
     @abc.abstractmethod
-    def _prox(
+    def _prox_f(
             self, x: npt.NDArray | cpt.NDArray,
             sigma: float | npt.NDArray | cpt.NDArray
     ) -> npt.NDArray | cpt.NDArray:
-        """proximal operator of the functional"""
+        """prox_f^sigma"""
         raise NotImplementedError
 
     def prox(
             self, x: npt.NDArray | cpt.NDArray,
             sigma: float | npt.NDArray | cpt.NDArray
     ) -> npt.NDArray | cpt.NDArray:
-        return self._prox(x - self.shift,
-                          sigma=self.scale * sigma) + self.shift
+        """prox_g^sigma using pre/post composition rules"""
+        return self._prox_f(x - self.shift,
+                            sigma=self.scale * sigma) + self.shift
 
     def prox_convex_dual(
             self, x: npt.NDArray | cpt.NDArray,
             sigma: float | npt.NDArray | cpt.NDArray
     ) -> npt.NDArray | cpt.NDArray:
-        # Moreau indentity
+        """prox_g*^sigma using Moreau"""
         return x - sigma * self.prox(x / sigma, sigma=1. / sigma)
 
 
-class FunctionalWithDualProx(Functional):
+class ConvexFunctionalWithDualProx(Functional):
+    """abstract class for functional g(x) =  scale * f(x - shift) 
+       where prox_f*^sigma is known (analytically)
+
+       we can calculate prox_g^sigma using Moreau's identity
+       f*/g* are the convex dual functions of g/f
+    """
 
     @abc.abstractmethod
-    def _prox_convex_dual(
+    def _prox_convex_dual_f(
             self, x: npt.NDArray | cpt.NDArray,
             sigma: float | npt.NDArray | cpt.NDArray
     ) -> npt.NDArray | cpt.NDArray:
-        """proximal operator of the functional"""
+        """prox_f*^sigma"""
         raise NotImplementedError
 
     def prox_convex_dual(
             self, x: npt.NDArray | cpt.NDArray,
             sigma: float | npt.NDArray | cpt.NDArray
     ) -> npt.NDArray | cpt.NDArray:
-        if self.shift != 0:
-            raise ValueError
-
-        return self.scale * self._prox_convex_dual(x / self.scale,
-                                                   sigma=sigma / self.scale)
+        """prox_g*^sigma"""
+        return self.scale * self._prox_convex_dual_f(
+            (x - sigma * self.shift) / self.scale, sigma=sigma / self.scale)
 
     def prox(
             self, x: npt.NDArray | cpt.NDArray,
             sigma: float | npt.NDArray | cpt.NDArray
     ) -> npt.NDArray | cpt.NDArray:
-        # Moreau indentity
+        """prox_g^sigma using Moreau"""
         return x - sigma * self.prox_convex_dual(x / sigma, sigma=1. / sigma)
 
 
-class SquaredL2Norm(SmoothFunctional, FunctionalWithPrimalProx):
+class SquaredL2Norm(SmoothFunctional, ConvexFunctionalWithPrimalProx):
     """squared L2 norm times 0.5"""
 
-    def _call(self, x: npt.NDArray | cpt.NDArray) -> float:
+    def _call_f(self, x: npt.NDArray | cpt.NDArray) -> float:
+        """f(x) = 0.5 * sum_x conj(x_i) * x_i"""
         return 0.5 * (self.xp.conj(x) * x).sum().real
 
-    def _prox(
+    def _prox_f(
             self, x: npt.NDArray | cpt.NDArray,
             sigma: float | npt.NDArray | cpt.NDArray
     ) -> npt.NDArray | cpt.NDArray:
+        """prox_f^sigma = x / (1 + sigma)"""
         return x / (1 + sigma)
 
-    def _gradient(self,
-                  x: npt.NDArray | cpt.NDArray) -> npt.NDArray | cpt.NDArray:
+    def _gradient_f(self,
+                    x: npt.NDArray | cpt.NDArray) -> npt.NDArray | cpt.NDArray:
+        """gradient f = x"""
         return x
 
 
-class L2L1Norm(FunctionalWithDualProx):
+class L2L1Norm(ConvexFunctionalWithDualProx):
     """sum of pointwise Eucliean norms (L2L1 norm)"""
 
-    def _call(self, x: npt.NDArray | cpt.NDArray) -> float:
+    def _call_f(self, x: npt.NDArray | cpt.NDArray) -> float:
+        """f(x) = sum_i SquaredL2Norm(x_i)"""
         return self.xp.linalg.norm(x, axis=0).sum()
 
-    def _prox_convex_dual(
+    def _prox_convex_dual_f(
             self, x: npt.NDArray | cpt.NDArray,
             sigma: float | npt.NDArray | cpt.NDArray
     ) -> npt.NDArray | cpt.NDArray:
+        """prox_f*^sigma = projection on L2 balls"""
         gnorm = self._xp.linalg.norm(x, axis=0)
         r = x / self._xp.clip(gnorm, 1, None)
 
         return r
 
 
-if __name__ == "__main__":
-    np.random.seed(1)
-    n = 3
-    num_iter = 50
-
-    shift = 10 * np.random.rand(n)
-    scale = abs(np.random.rand(1)[0])
-
-    f = SquaredL2Norm(np, scale=scale, shift=shift)
-
-    x = np.zeros(n)
-
-    for i in range(num_iter):
-        x = f.prox(x, sigma=1.2)
-        print(i, x - shift)
+#def main():
+#    import matplotlib.pyplot as plt
+#    np.random.seed(1)
+#    num_iter = 20
+#    shape = (3, 10, 10, 10)
+#
+#    sigmas = np.array([1e-2, 1e-1, 1e0, 1e1, 1e2])
+#
+#    shift = np.random.rand(*shape)
+#    scales = np.array([1e-2, 1e-1, 1e0, 1e1, 1e2])
+#    cost = np.zeros((scales.shape[0], sigmas.shape[0], num_iter))
+#
+#    for j, scale in enumerate(scales):
+#        #f = L2L1Norm(np, scale=scale, shift=shift)
+#        f = SquaredL2Norm(np, scale=scale, shift=shift)
+#
+#        x0 = np.random.rand(*shape)
+#
+#        for k, sigma in enumerate(sigmas):
+#            x = x0.copy()
+#            for i in range(num_iter):
+#                x = f.prox(x, sigma=sigma)
+#                cost[j, k, i] = f(x)
+#
+#    fig, ax = plt.subplots(1,
+#                           scales.shape[0],
+#                           figsize=(3 * scales.shape[0], 3))
+#    for j, scale in enumerate(scales):
+#        for k, sigma in enumerate(sigmas):
+#            ax[j].loglog(cost[j, k, :], label=f'sigma {sigma:.1e}')
+#            ax[j].set_title(f'scale {scale:.1e}')
+#    ax[0].legend()
+#    fig.tight_layout()
+#    fig.show()
+#
+#if __name__ == "__main__":
+#    main()
