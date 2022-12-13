@@ -24,7 +24,6 @@ def mae(x, y):
 if __name__ == '__main__':
 
     xp = np
-    xp.random.seed(1)
 
     n = 128
     x0 = 110.
@@ -36,11 +35,13 @@ if __name__ == '__main__':
     #prior = 'SquaredL2Norm'
     #betas = [1e1, 1e2, 1e3]
     T2star_factor = 1.
-    readout_time_factor = 1. / 4
+    readout_time_factor = 1. / 8
+    seed = 2
 
     #-------------------------------------------------------------------
     #-------------------------------------------------------------------
     #-------------------------------------------------------------------
+    xp.random.seed(seed)
 
     signal_csf1 = SquareSignal(stretch=20. / x0,
                                scale=1,
@@ -225,3 +226,15 @@ if __name__ == '__main__':
 
     fig2.tight_layout()
     fig2.show()
+
+    fig3, ax3 = plt.subplots(1, 2, figsize=(6, 3))
+    ax3[0].plot(xx, signal.signal(xx, t=0).real, '-', lw=0.5)
+    ax3[0].plot(xx, signal.signal(xx, t=t_readout.max() / 2).real, '-', lw=0.5)
+    ax3[0].plot(xx, signal.signal(xx, t=t_readout.max()).real, '-', lw=0.5)
+    ax3[1].plot(xx, signal.signal(xx, t=0).imag, '-', lw=0.5)
+    ax3[1].plot(xx, signal.signal(xx, t=t_readout.max() / 2).imag, '-', lw=0.5)
+    ax3[1].plot(xx, signal.signal(xx, t=t_readout.max()).imag, '-', lw=0.5)
+    ax3[0].grid(ls=':')
+    ax3[1].grid(ls=':')
+    fig3.tight_layout()
+    fig3.show()
