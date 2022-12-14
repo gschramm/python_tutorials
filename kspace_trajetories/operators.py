@@ -17,7 +17,8 @@ class LinearOperator(abc.ABC):
                  input_shape: tuple[int, ...],
                  output_shape: tuple[int, ...],
                  xp: types.ModuleType,
-                 dtype: type = float) -> None:
+                 input_dtype: type | None = None,
+                 output_dtype: type | None = None) -> None:
         """Linear operator abstract base class that maps real array x to real array y
 
         Parameters
@@ -33,12 +34,26 @@ class LinearOperator(abc.ABC):
         self._input_shape = input_shape
         self._output_shape = output_shape
         self._xp = xp
-        self._dtype = dtype
+
+        if input_dtype is not None:
+            self._input_dtype = input_dtype
+        else:
+            self._input_dtype = xp.float64
+
+        if output_dtype is not None:
+            self._output_dtype = output_dtype
+        else:
+            self._output_dtype = xp.float64
 
     @property
-    def dtype(self) -> type:
-        """the data type of the input and output arrays"""
-        return self._dtype
+    def input_dtype(self) -> type:
+        """the data type of the input array"""
+        return self._input_dtype
+
+    @property
+    def output_dtype(self) -> type:
+        """the data type of the output array"""
+        return self._output_dtype
 
     @property
     def input_shape(self) -> tuple[int, ...]:
@@ -109,15 +124,16 @@ class LinearOperator(abc.ABC):
         verbose : bool, optional
             prnt verbose output
         """
-        x = self.xp.random.rand(*self.input_shape).astype(self.dtype)
-        y = self.xp.random.rand(*self.output_shape).astype(self.dtype)
+        x = self.xp.random.rand(*self.input_shape).astype(self.input_dtype)
+        y = self.xp.random.rand(*self.output_shape).astype(self.output_dtype)
 
         if self.xp.iscomplexobj(x):
-            x += 1j * self.xp.random.rand(*self.input_shape).astype(self.dtype)
+            x += 1j * self.xp.random.rand(*self.input_shape).astype(
+                self.input_dtype)
 
         if self.xp.iscomplexobj(y):
             y += 1j * self.xp.random.rand(*self.output_shape).astype(
-                self.dtype)
+                self.output_dtype)
 
         x_fwd = self.forward(x)
         y_back = self.adjoint(y)
@@ -145,10 +161,11 @@ class LinearOperator(abc.ABC):
             the estimated norm
         """
 
-        x = self.xp.random.rand(*self._input_shape).astype(self.dtype)
+        x = self.xp.random.rand(*self._input_shape).astype(self.input_dtype)
 
         if self.xp.iscomplexobj(x):
-            x += 1j * self.xp.random.rand(*self.input_shape).astype(self.dtype)
+            x += 1j * self.xp.random.rand(*self.input_shape).astype(
+                self.input_dtype)
 
         for i in range(num_iter):
             x = self.adjoint(self.forward(x))
@@ -164,11 +181,17 @@ class FFT(LinearOperator):
     def __init__(self,
                  x: npt.NDArray,
                  xp: types.ModuleType = np,
-                 dtype=complex) -> None:
+                 input_dtype: type | None = None) -> None:
+
+        if input_dtype is None:
+            input_dtype = xp.complex128
+
         super().__init__(input_shape=x.shape,
                          output_shape=x.shape,
                          xp=xp,
-                         dtype=dtype)
+                         input_dtype=input_dtype,
+                         output_dtype=input_dtype)
+
         self._dx = float(x[1] - x[0])
         self._x = x
         self._phase_factor = self.dx * xp.exp(-1j * self.k * float(x[0]))
@@ -223,8 +246,8 @@ class T2CorrectedFFT(FFT):
                  t_readout: npt.NDArray,
                  T2star: npt.NDArray,
                  xp: types.ModuleType = np,
-                 dtype=complex) -> None:
-        super().__init__(x=x, xp=xp, dtype=dtype)
+                 input_dtype: type | None = None) -> None:
+        super().__init__(x=x, xp=xp, input_dtype=input_dtype)
 
         self._t_readout = t_readout
         self._T2star = T2star
@@ -243,7 +266,7 @@ class T2CorrectedFFT(FFT):
             self._masks[i, -i] = 1
 
     def forward(self, x: npt.NDArray) -> npt.NDArray:
-        y = self.xp.zeros(self._n, dtype=self.xp.complex128)
+        y = self.xp.zeros(self._n, dtype=self.output_dtype)
 
         for i in range(self._n // 2 + 1):
             y += super().forward(
@@ -252,7 +275,7 @@ class T2CorrectedFFT(FFT):
         return y
 
     def adjoint(self, y: npt.NDArray) -> npt.NDArray:
-        x = self.xp.zeros(self._n, dtype=self.xp.complex128)
+        x = self.xp.zeros(self._n, dtype=self.input_dtype)
 
         for i in range(self._n // 2 + 1):
             x += super().adjoint(
@@ -267,7 +290,7 @@ class GradientOperator(LinearOperator):
     def __init__(self,
                  input_shape: tuple[int, ...],
                  xp: types.ModuleType = np,
-                 dtype: type = float) -> None:
+                 input_dtype: type | None = None) -> None:
         """_summary_
 
         Parameters
@@ -276,12 +299,21 @@ class GradientOperator(LinearOperator):
             the input array shape
         xp : types.ModuleType
             the array module (numpy or cupy)
-        dtype : type, optional, by default numpy
-            data type of the input and output (float or complex), by default float
+        input_dtype : type, optional,
+            data type of the input array, by default float64
+        output_dtype : type, optional,
+            data type of the output array, by default float64
         """
 
+        if input_dtype is None:
+            input_dtype = xp.float64
+
         output_shape = (len(input_shape), ) + input_shape
-        super().__init__(input_shape, output_shape, xp=xp, dtype=dtype)
+        super().__init__(input_shape,
+                         output_shape,
+                         xp=xp,
+                         input_dtype=input_dtype,
+                         output_dtype=input_dtype)
 
     def forward(self, x):
         g = self.xp.zeros(self.output_shape, dtype=x.dtype)

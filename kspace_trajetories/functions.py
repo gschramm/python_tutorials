@@ -301,7 +301,7 @@ class L2L1Norm(ConvexFunctionalWithDualProx):
 
     def _call_f(self, x: npt.NDArray | cpt.NDArray) -> float:
         """f(x) = sum_i SquaredL2Norm(x_i)"""
-        if self._xp.isrealobj(x):
+        if self.xp.isrealobj(x):
             res = self.xp.linalg.norm(x, axis=0).sum()
         else:
             res = self.xp.linalg.norm(
@@ -315,7 +315,7 @@ class L2L1Norm(ConvexFunctionalWithDualProx):
             sigma: float | npt.NDArray | cpt.NDArray
     ) -> npt.NDArray | cpt.NDArray:
         """prox_f*^sigma = projection on L2 balls"""
-        if self._xp.isrealobj(x):
+        if self.xp.isrealobj(x):
             gnorm = self.xp.linalg.norm(x, axis=0)
             r = x / self.xp.clip(gnorm, 1, None)
         else:

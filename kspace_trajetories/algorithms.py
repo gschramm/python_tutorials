@@ -58,21 +58,25 @@ class PDHG:
         self._g_functional = g_functional
 
         self._x = self.xp.zeros(self._data_operator.input_shape,
-                                dtype=self.xp.float32)
+                                dtype=self.data_operator.input_dtype)
         self._xbar = self.xp.zeros(self._data_operator.input_shape,
-                                   dtype=self.xp.float32)
+                                   dtype=self.data_operator.input_dtype)
         self._y_data = self.xp.zeros(self._data_operator.output_shape,
-                                     dtype=self.xp.float32)
-
+                                     dtype=self.data_operator.output_dtype)
         if self._prior_operator is not None:
-            self._y_prior = self.xp.zeros(self._prior_operator.output_shape,
-                                          dtype=self.xp.float32)
+            self._y_prior = self.xp.zeros(
+                self._prior_operator.output_shape,
+                dtype=self.prior_operator.output_dtype)
 
         self.setup()
 
     @property
     def data_operator(self) -> LinearOperator:
         return self._data_operator
+
+    @property
+    def prior_operator(self) -> LinearOperator:
+        return self._prior_operator
 
     @property
     def xp(self) -> types.ModuleType:
@@ -104,15 +108,15 @@ class PDHG:
 
     def setup(self) -> None:
         self._x = self.xp.zeros(self._data_operator.input_shape,
-                                dtype=self.xp.float32)
+                                dtype=self.data_operator.input_dtype)
         self._xbar = self.xp.zeros(self._data_operator.input_shape,
-                                   dtype=self.xp.float32)
+                                   dtype=self.data_operator.input_dtype)
         self._y_data = self.xp.zeros(self._data_operator.output_shape,
-                                     dtype=self.xp.float32)
-
+                                     dtype=self.data_operator.output_dtype)
         if self._prior_operator is not None:
-            self._y_prior = self.xp.zeros(self._prior_operator.output_shape,
-                                          dtype=self.xp.float32)
+            self._y_prior = self.xp.zeros(
+                self._prior_operator.output_shape,
+                dtype=self.prior_operator.output_dtype)
 
         self._epoch_counter = 0
         self._cost_data = []

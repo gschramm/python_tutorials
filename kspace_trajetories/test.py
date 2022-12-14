@@ -127,7 +127,7 @@ if __name__ == '__main__':
 
     x, dx = xp.linspace(-x0, x0, n, endpoint=False, retstep=True)
 
-    fft = FFT(x, xp=xp)
+    fft = FFT(x, xp=xp, input_dtype=xp.complex128)
     k = fft.k
 
     tpi_trajectory = TPITrajectory(
@@ -166,13 +166,19 @@ if __name__ == '__main__':
     recon1 = fft.inverse(data)
 
     if model_T2star:
-        data_operator = T2CorrectedFFT(x, t_readout, signal.T2star(x), xp=xp)
+        data_operator = T2CorrectedFFT(x,
+                                       t_readout,
+                                       signal.T2star(x),
+                                       xp=xp,
+                                       input_dtype=xp.complex128)
     else:
         data_operator = fft
 
     data_distance = SquaredL2Norm(xp, scale=1.0, shift=data)
 
-    prior_operator = GradientOperator(x.shape, xp=xp)
+    prior_operator = GradientOperator(x.shape,
+                                      xp=xp,
+                                      input_dtype=xp.complex128)
 
     data_operator_norm = data_operator.norm(num_iter=200)
 
