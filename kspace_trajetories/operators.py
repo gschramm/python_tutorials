@@ -169,11 +169,11 @@ class FFT(LinearOperator):
                          output_shape=x.shape,
                          xp=xp,
                          dtype=dtype)
-        self._dx = x[1] - x[0]
+        self._dx = float(x[1] - x[0])
         self._x = x
-        self._phase_factor = self.dx * np.exp(-1j * self.k * x[0])
-        self._scale_factor = np.sqrt(x.size / (2 * np.pi))
-        self._adjoint_factor = (np.abs(x[0])**2) / ((x.size / 2)**2)
+        self._phase_factor = self.dx * xp.exp(-1j * self.k * float(x[0]))
+        self._scale_factor = float(np.sqrt(x.size / (2 * np.pi)))
+        self._adjoint_factor = float((np.abs(x[0])**2) / ((x.size / 2)**2))
 
     @property
     def x(self) -> npt.NDArray:
@@ -234,17 +234,16 @@ class T2CorrectedFFT(FFT):
         self._n = self.x.shape[0]
         self._decay_envs = self.xp.zeros((self._n // 2 + 1, self._n))
         self._masks = self.xp.zeros((self._n // 2 + 1, self._n))
+        inds = self.xp.where(T2star > 0)
         for i, t in enumerate(t_readout[:(self._n // 2 + 1)]):
-            self._decay_envs[i, :] = np.exp(
-                self.xp.divide(-t,
-                               T2star,
-                               out=self.xp.zeros(self._n),
-                               where=(T2star > 0)))
+            tmp = self.xp.zeros(self._n)
+            tmp[inds] = (t / T2star[inds])
+            self._decay_envs[i, :] = xp.exp(-tmp)
             self._masks[i, i] = 1
             self._masks[i, -i] = 1
 
     def forward(self, x: npt.NDArray) -> npt.NDArray:
-        y = np.zeros(self._n, dtype=self.xp.complex128)
+        y = self.xp.zeros(self._n, dtype=self.xp.complex128)
 
         for i in range(self._n // 2 + 1):
             y += super().forward(
@@ -253,7 +252,7 @@ class T2CorrectedFFT(FFT):
         return y
 
     def adjoint(self, y: npt.NDArray) -> npt.NDArray:
-        x = np.zeros(self._n, dtype=self.xp.complex128)
+        x = self.xp.zeros(self._n, dtype=self.xp.complex128)
 
         for i in range(self._n // 2 + 1):
             x += super().adjoint(

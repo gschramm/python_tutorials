@@ -53,14 +53,14 @@ if __name__ == '__main__':
 
     n = 128
     x0 = 110
-    noise_level = 0.2
+    noise_level = 0.1
     num_iter = 2000
     rho = 1e2
     prior = 'L1L2Norm'
     #prior = 'SquaredL2Norm'
-    betas = xp.logspace(-1, 2, 9)
+    betas = xp.logspace(-2, 2, 10)
     T2star_factor = 1.
-    readout_time_factor = 1 / 1
+    readout_time_factor = 1 / 4
     seed = 2
     model_T2star = True
 
@@ -104,7 +104,7 @@ if __name__ == '__main__':
 
     x, dx = xp.linspace(-x0, x0, n, endpoint=False, retstep=True)
 
-    fft = FFT(x)
+    fft = FFT(x, xp=xp)
     k = fft.k
 
     #-----------------------------------------------------------------------------------------------------------------
