@@ -1,7 +1,7 @@
 """demo to show how to simulate non-uniform kspace data and on how to reconstruct them via conjugate gradient"""
 
 import numpy as np
-from scipy.optimize import fmin_cg
+from scipy.optimize import fmin_cg, fmin_l_bfgs_b
 import matplotlib.pyplot as plt
 
 from operators import MultiChannelNonCartesianMRAcquisitionModel, ComplexGradientOperator
@@ -10,8 +10,8 @@ from kspace_trajectories import radial_2d_golden_angle, stack_of_2d_golden_angle
 
 if __name__ == '__main__':
     recon_shape = (256, 256)
-    num_iterations = 100
-    undersampling_factor = 1
+    num_iterations = 1000
+    undersampling_factor = 8
 
     num_spokes = int(recon_shape[1] * np.pi / 2) // undersampling_factor
     num_samples_per_spoke = recon_shape[0]
@@ -33,6 +33,9 @@ if __name__ == '__main__':
 
     x = np.load('xcat_vol.npz')['arr_0'].reshape(1024, 1024,
                                                  1024).astype(np.float32)
+
+    # normalize x to have max 1
+    x /= x.max()
 
     # swap axes to have sagittal axis in front
     x = np.swapaxes(x, 0, 2)
@@ -122,9 +125,15 @@ if __name__ == '__main__':
 
     # cg recon method
     recon_cg = fmin_cg(loss, x0, fprime=loss.gradient, maxiter=num_iterations)
-
-    # reshape the flattened cg recon
     recon_cg = recon_cg.reshape(recon_shape + (2, ))
+
+    # LBFGS recon method
+    recon_lb = fmin_l_bfgs_b(loss,
+                             x0,
+                             fprime=loss.gradient,
+                             maxiter=num_iterations,
+                             disp=2)
+    recon_lb = recon_lb[0].reshape(recon_shape + (2, ))
 
     #-----------------------------------------------------------------------------
     #-----------------------------------------------------------------------------
@@ -133,14 +142,18 @@ if __name__ == '__main__':
     #-----------------------------------------------------------------------------
 
     ims = dict(cmap=plt.cm.Greys_r, origin='lower')
-    fig, ax = plt.subplots(1, 2, figsize=(10, 5))
+    fig, ax = plt.subplots(1, 3, figsize=(12, 4))
     if len(recon_shape) == 2:
         ax[0].imshow(np.linalg.norm(x, axis=-1).T, **ims)
         ax[1].imshow(np.linalg.norm(recon_cg, axis=-1).T, **ims)
+        ax[2].imshow(np.linalg.norm(recon_lb, axis=-1).T, **ims)
     if len(recon_shape) == 3:
         ax[0].imshow(np.linalg.norm(x, axis=-1)[x.shape[0] // 2, ...].T, **ims)
         ax[1].imshow(
             np.linalg.norm(recon_cg, axis=-1)[recon_shape[0] // 2, ...].T,
+            **ims)
+        ax[1].imshow(
+            np.linalg.norm(recon_lb, axis=-1)[recon_shape[0] // 2, ...].T,
             **ims)
     fig.tight_layout()
     fig.show()
