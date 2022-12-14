@@ -118,6 +118,11 @@ class CompoundAnalysticalFourierSignal():
     def signals(self) -> list[AnalysticalFourierSignal]:
         return self._signals
 
+    def T2star(self, x: npt.NDArray) -> npt.NDArray:
+        return functools.reduce(
+            lambda a, b: a + b,
+            [z.T2star * (z.signal(x, t=0) > 0) for z in self.signals])
+
     def signal(self, x: npt.NDArray, t: float = 0) -> npt.NDArray:
         return functools.reduce(lambda a, b: a + b,
                                 [z.signal(x, t=t) for z in self.signals])

@@ -51,16 +51,15 @@ if __name__ == '__main__':
     xp = np
 
     n = 128
-    x0 = 110.
+    x0 = 110
     noise_level = 0.2
     num_iter = 2000
     rho = 1e2
     prior = 'L1L2Norm'
-    betas = np.logspace(-1, 1.5, 9)
     #prior = 'SquaredL2Norm'
-    #betas = [1e1, 1e2, 1e3]
+    betas = np.logspace(-1, 2, 13)
     T2star_factor = 1.
-    readout_time_factor = 1. / 4
+    readout_time_factor = 1 / 4
     seed = 2
 
     #-------------------------------------------------------------------
@@ -68,41 +67,38 @@ if __name__ == '__main__':
     #-------------------------------------------------------------------
     xp.random.seed(seed)
 
-    signal_csf1 = SquareSignal(stretch=20. / x0,
+    signal_csf1 = SquareSignal(stretch=16 / x0,
                                scale=1,
-                               shift=0.725 * x0,
-                               T2star=50 * T2star_factor)
-    signal_csf2 = SquareSignal(stretch=20. / x0,
+                               shift=29 * x0 / 32,
+                               T2star=40 * T2star_factor)
+    signal_csf2 = SquareSignal(stretch=16 / x0,
                                scale=1,
-                               shift=-0.725 * x0,
-                               T2star=50 * T2star_factor)
-    signal_gm1 = SquareSignal(stretch=5. / x0,
+                               shift=-29 * x0 / 32,
+                               T2star=40 * T2star_factor)
+    signal_gm1 = SquareSignal(stretch=4. / x0,
                               scale=0.5,
-                              shift=0.6 * x0,
+                              shift=3 * x0 / 4,
                               T2star=9 * T2star_factor)
-    signal_gm2 = SquareSignal(stretch=5. / x0,
+    signal_gm2 = SquareSignal(stretch=4. / x0,
                               scale=0.5,
-                              shift=-0.6 * x0,
+                              shift=-3 * x0 / 4,
                               T2star=9 * T2star_factor)
-    signal_wm = SquareSignal(stretch=1. / x0,
-                             scale=0.45,
-                             shift=0,
-                             T2star=8 * T2star_factor)
-    signal_lesion = SquareSignal(stretch=10. / x0,
-                                 scale=0.25,
+    signal_wm1 = SquareSignal(stretch=2 / x0,
+                              scale=0.45,
+                              shift=(-3 * x0 / 8),
+                              T2star=8 * T2star_factor)
+    signal_wm2 = SquareSignal(stretch=2 / x0,
+                              scale=0.45,
+                              shift=(3 * x0 / 8),
+                              T2star=8 * T2star_factor)
+    signal_lesion = SquareSignal(stretch=4. / x0,
+                                 scale=0.65,
                                  shift=0,
                                  T2star=8 * T2star_factor)
     signal = CompoundAnalysticalFourierSignal([
-        signal_csf1, signal_csf2, signal_gm1, signal_gm2, signal_wm,
-        signal_lesion
+        signal_csf1, signal_csf2, signal_gm1, signal_gm2, signal_wm1,
+        signal_wm2, signal_lesion
     ])
-
-    #fig, ax = plt.subplots(1,2, figsize=(8,4))
-    #ax[0].plot(xx, signal.signal(xx, t = 0))
-    #ax[0].plot(xx, signal.signal(xx, t = 10))
-    #ax[0].plot(xx, signal.signal(xx, t = 40))
-    #fig.tight_layout()
-    #fig.show()
 
     x, dx = xp.linspace(-x0, x0, n, endpoint=False, retstep=True)
 
@@ -172,7 +168,8 @@ if __name__ == '__main__':
     #-----------------------------------------------------------------------------------------------------------------
     #-----------------------------------------------------------------------------------------------------------------
     s_true = signal.signal(x)
-    weights = (s_true.real > 0).astype(np.float64)
+    #weights = (s_true.real > 0).astype(np.float64)
+    weights = None
     metrics_dict = dict(MSE=MSE(y=s_true, weights=weights),
                         MAE=MAE(y=s_true, weights=weights))
     results = {}
@@ -252,13 +249,14 @@ if __name__ == '__main__':
     fig2.tight_layout()
     fig2.show()
 
-    fig3, ax3 = plt.subplots(1, 2, figsize=(6, 3))
+    fig3, ax3 = plt.subplots(1, 3, figsize=(9, 3))
     ax3[0].plot(xx, signal.signal(xx, t=0).real, '-', lw=0.5)
     ax3[0].plot(xx, signal.signal(xx, t=t_readout.max() / 2).real, '-', lw=0.5)
     ax3[0].plot(xx, signal.signal(xx, t=t_readout.max()).real, '-', lw=0.5)
     ax3[1].plot(xx, signal.signal(xx, t=0).imag, '-', lw=0.5)
     ax3[1].plot(xx, signal.signal(xx, t=t_readout.max() / 2).imag, '-', lw=0.5)
     ax3[1].plot(xx, signal.signal(xx, t=t_readout.max()).imag, '-', lw=0.5)
+    ax3[2].plot(xx, signal.T2star(xx), '-', lw=0.5)
     ax3[0].grid(ls=':')
     ax3[1].grid(ls=':')
     fig3.tight_layout()
