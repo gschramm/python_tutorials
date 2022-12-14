@@ -80,7 +80,7 @@ if __name__ == '__main__':
     num_iter = 4000
     rho = 1e1
     prior = args.prior
-    betas = xp.logspace(-1, 2, 15)
+    betas = xp.logspace(-1, 2, 9)
     T2star_factor = 1.
     readout_time_factor = 1 / args.gradient_factor
     seed = 2
@@ -127,7 +127,7 @@ if __name__ == '__main__':
 
     x, dx = xp.linspace(-x0, x0, n, endpoint=False, retstep=True)
 
-    fft = FFT(x, xp=xp, input_dtype=xp.complex128)
+    fft = FFT(x, xp=xp, dtype=xp.complex128)
     k = fft.k
 
     tpi_trajectory = TPITrajectory(
@@ -170,7 +170,7 @@ if __name__ == '__main__':
                                        t_readout,
                                        signal.T2star(x),
                                        xp=xp,
-                                       input_dtype=xp.complex128)
+                                       dtype=xp.complex128)
     else:
         data_operator = fft
 
@@ -178,7 +178,7 @@ if __name__ == '__main__':
 
     prior_operator = GradientOperator(x.shape,
                                       xp=xp,
-                                      input_dtype=xp.complex128)
+                                      dtype=data_operator.input_dtype)
 
     data_operator_norm = data_operator.norm(num_iter=200)
 

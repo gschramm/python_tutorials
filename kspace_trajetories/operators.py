@@ -181,16 +181,16 @@ class FFT(LinearOperator):
     def __init__(self,
                  x: npt.NDArray,
                  xp: types.ModuleType = np,
-                 input_dtype: type | None = None) -> None:
+                 dtype: type | None = None) -> None:
 
-        if input_dtype is None:
-            input_dtype = xp.complex128
+        if dtype is None:
+            dtype = xp.complex128
 
         super().__init__(input_shape=x.shape,
                          output_shape=x.shape,
                          xp=xp,
-                         input_dtype=input_dtype,
-                         output_dtype=input_dtype)
+                         input_dtype=dtype,
+                         output_dtype=dtype)
 
         self._dx = float(x[1] - x[0])
         self._x = x
@@ -246,8 +246,8 @@ class T2CorrectedFFT(FFT):
                  t_readout: npt.NDArray,
                  T2star: npt.NDArray,
                  xp: types.ModuleType = np,
-                 input_dtype: type | None = None) -> None:
-        super().__init__(x=x, xp=xp, input_dtype=input_dtype)
+                 dtype: type | None = None) -> None:
+        super().__init__(x=x, xp=xp, dtype=dtype)
 
         self._t_readout = t_readout
         self._T2star = T2star
@@ -290,7 +290,7 @@ class GradientOperator(LinearOperator):
     def __init__(self,
                  input_shape: tuple[int, ...],
                  xp: types.ModuleType = np,
-                 input_dtype: type | None = None) -> None:
+                 dtype: type | None = None) -> None:
         """_summary_
 
         Parameters
@@ -299,21 +299,19 @@ class GradientOperator(LinearOperator):
             the input array shape
         xp : types.ModuleType
             the array module (numpy or cupy)
-        input_dtype : type, optional,
+        dtype : type, optional,
             data type of the input array, by default float64
-        output_dtype : type, optional,
-            data type of the output array, by default float64
         """
 
-        if input_dtype is None:
-            input_dtype = xp.float64
+        if dtype is None:
+            dtype = xp.float64
 
         output_shape = (len(input_shape), ) + input_shape
         super().__init__(input_shape,
                          output_shape,
                          xp=xp,
-                         input_dtype=input_dtype,
-                         output_dtype=input_dtype)
+                         input_dtype=dtype,
+                         output_dtype=dtype)
 
     def forward(self, x):
         g = self.xp.zeros(self.output_shape, dtype=x.dtype)
