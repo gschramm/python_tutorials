@@ -301,53 +301,30 @@ class L2L1Norm(ConvexFunctionalWithDualProx):
 
     def _call_f(self, x: npt.NDArray | cpt.NDArray) -> float:
         """f(x) = sum_i SquaredL2Norm(x_i)"""
-        return self.xp.linalg.norm(x, axis=0).sum()
+        if self._xp.isrealobj(x):
+            res = self.xp.linalg.norm(x, axis=0).sum()
+        else:
+            res = self.xp.linalg.norm(
+                x.real, axis=0).sum() + self.xp.linalg.norm(x.imag,
+                                                            axis=0).sum()
+
+        return res
 
     def _prox_convex_dual_f(
             self, x: npt.NDArray | cpt.NDArray,
             sigma: float | npt.NDArray | cpt.NDArray
     ) -> npt.NDArray | cpt.NDArray:
         """prox_f*^sigma = projection on L2 balls"""
-        gnorm = self._xp.linalg.norm(x, axis=0)
-        r = x / self._xp.clip(gnorm, 1, None)
+        if self._xp.isrealobj(x):
+            gnorm = self.xp.linalg.norm(x, axis=0)
+            r = x / self.xp.clip(gnorm, 1, None)
+        else:
+            r = self.xp.zeros_like(x)
+
+            gnorm_real = self.xp.linalg.norm(x.real, axis=0)
+            r.real = x.real / self.xp.clip(gnorm_real, 1, None)
+
+            gnorm_imag = self.xp.linalg.norm(x.imag, axis=0)
+            r.imag = x.imag / self.xp.clip(gnorm_imag, 1, None)
 
         return r
-
-
-#def main():
-#    import matplotlib.pyplot as plt
-#    np.random.seed(1)
-#    num_iter = 20
-#    shape = (3, 10, 10, 10)
-#
-#    sigmas = np.array([1e-2, 1e-1, 1e0, 1e1, 1e2])
-#
-#    shift = np.random.rand(*shape)
-#    scales = np.array([1e-2, 1e-1, 1e0, 1e1, 1e2])
-#    cost = np.zeros((scales.shape[0], sigmas.shape[0], num_iter))
-#
-#    for j, scale in enumerate(scales):
-#        #f = L2L1Norm(np, scale=scale, shift=shift)
-#        f = SquaredL2Norm(np, scale=scale, shift=shift)
-#
-#        x0 = np.random.rand(*shape)
-#
-#        for k, sigma in enumerate(sigmas):
-#            x = x0.copy()
-#            for i in range(num_iter):
-#                x = f.prox(x, sigma=sigma)
-#                cost[j, k, i] = f(x)
-#
-#    fig, ax = plt.subplots(1,
-#                           scales.shape[0],
-#                           figsize=(3 * scales.shape[0], 3))
-#    for j, scale in enumerate(scales):
-#        for k, sigma in enumerate(sigmas):
-#            ax[j].loglog(cost[j, k, :], label=f'sigma {sigma:.1e}')
-#            ax[j].set_title(f'scale {scale:.1e}')
-#    ax[0].legend()
-#    fig.tight_layout()
-#    fig.show()
-#
-#if __name__ == "__main__":
-#    main()
