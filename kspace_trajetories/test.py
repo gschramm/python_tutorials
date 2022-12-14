@@ -2,15 +2,12 @@
 import abc
 import numpy as np
 import numpy.typing as npt
+from scipy.interpolate import interp1d
 import matplotlib.pyplot as plt
 
 from functions import SquareSignal, TriangleSignal, GaussSignal, CompoundAnalysticalFourierSignal, SquaredL2Norm, L2L1Norm
 from operators import FFT, GradientOperator, T2CorrectedFFT
 from algorithms import PDHG
-
-
-def t_of_k(k, factor: float = 1.):
-    return factor * 40 * xp.abs(k) / 0.91391
 
 
 class DiffMetric(abc.ABC):
@@ -47,22 +44,48 @@ class MAE(DiffMetric):
         return self._xp.abs(d).sum()
 
 
+class TPITrajectory:
+
+    def __init__(self, fname: str = 'G16_v1.txt', kmax: float = 1.) -> None:
+        self._fname = fname
+        self._kmax = kmax
+
+        tmp = np.loadtxt(fname)
+        self._t_ms = tmp[:, 1]
+        self._k = tmp[:, 0] * self._kmax / tmp[:, 0].max()
+
+        self._t_of_k = interp1d(self._k, self._t_ms)
+
+    def t_of_k(self, k: npt.NDArray, factor: float = 1.) -> npt.NDArray:
+        return factor * self._t_of_k(np.abs(k))
+
+
 if __name__ == '__main__':
+
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--noise_level', default=0.2, type=float)
+    parser.add_argument('--gradient_factor', default=1., type=float)
+    parser.add_argument('--prior',
+                        default='L1L2Norm',
+                        choices=['L1L2Norm', 'SquaredL2Norm'])
+    args = parser.parse_args()
 
     xp = np
 
-    n = 128
+    n = 64
     x0 = 110
-    noise_level = 0.1
-    num_iter = 2000
-    rho = 1e2
-    prior = 'L1L2Norm'
-    #prior = 'SquaredL2Norm'
-    betas = xp.logspace(-2, 2, 10)
+    noise_level = args.noise_level
+    num_iter = 4000
+    rho = 1e1
+    prior = args.prior
+    betas = xp.logspace(-1, 2, 15)
     T2star_factor = 1.
-    readout_time_factor = 1 / 4
+    readout_time_factor = 1 / args.gradient_factor
     seed = 2
     model_T2star = True
+    verbose = False
 
     #-------------------------------------------------------------------
     #-------------------------------------------------------------------
@@ -107,6 +130,10 @@ if __name__ == '__main__':
     fft = FFT(x, xp=xp)
     k = fft.k
 
+    tpi_trajectory = TPITrajectory(
+        fname='G16_v1.txt', kmax=0.914
+    )  # 0.914 is the max k-value for the FFT with x0 = 110 and n = 64
+
     #-----------------------------------------------------------------------------------------------------------------
     #-----------------------------------------------------------------------------------------------------------------
     # generate data from continuous FFT
@@ -117,7 +144,7 @@ if __name__ == '__main__':
     t_readout = xp.zeros(n)
 
     for i, kk in enumerate(k):
-        t_r = t_of_k(kk, factor=readout_time_factor)
+        t_r = tpi_trajectory.t_of_k(kk, factor=readout_time_factor)
         t_readout[i] = t_r
         noise_free_data[i] = signal.continous_ft(kk, t=t_r)
 
@@ -128,6 +155,7 @@ if __name__ == '__main__':
             *noise_free_data.shape)
 
     print(f'readout time factor .: {readout_time_factor:.1e}')
+    print(f'noise level         .: {noise_level:.1e}')
     print(f'scaled noise level  .: {scaled_noise_level:.1e}')
 
     #-----------------------------------------------------------------------------------------------------------------
@@ -152,7 +180,8 @@ if __name__ == '__main__':
     pdhg_costs = xp.zeros((len(betas), num_iter), dtype=xp.float64)
 
     for i, beta in enumerate(betas):
-        print(f'{i+1}/{betas.size}')
+        if verbose:
+            print(f'{i+1}/{betas.size}')
         if prior == 'SquaredL2Norm':
             prior_norm = SquaredL2Norm(xp, scale=beta)
         elif prior == 'L1L2Norm':
@@ -206,14 +235,15 @@ if __name__ == '__main__':
                    pdhg_recons[i, :].imag,
                    '-',
                    lw=0.8,
-                   label=f'{prior} {beta:.1e}')
+                   label=f'{prior} {beta:.1e}',
+                   color=plt.cm.tab10((i + 1) % 10))
 
     ax[2].plot(kk, signal.continous_ft(kk).real, 'k-', lw=0.5)
     ax[2].plot(k, noise_free_data.real, 'x', ms=4)
     ax[2].plot(k, data.real, '.', ms=4)
 
     for i, beta in enumerate(betas):
-        ax[3].loglog(it, pdhg_costs[i, ...], color=plt.cm.tab10(i + 1))
+        ax[3].loglog(it, pdhg_costs[i, ...], color=plt.cm.tab10((i + 1) % 10))
 
     for axx in ax.ravel():
         axx.grid(ls=':')
