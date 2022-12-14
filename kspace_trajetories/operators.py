@@ -185,7 +185,7 @@ class FFT(LinearOperator):
 
     @property
     def k(self) -> npt.NDArray:
-        return self.xp.fft.fftfreq(self.x.size, d=self.dx) * 2 * np.pi
+        return self.xp.fft.fftfreq(self.x.size, d=self.dx) * 2 * self.xp.pi
 
     @property
     def k_scaled(self) -> npt.NDArray:
@@ -213,6 +213,53 @@ class FFT(LinearOperator):
 
     def inverse(self, y: npt.NDArray) -> npt.NDArray:
         return self.adjoint(y) / (self.scale_factor**2) / self.adjoint_factor
+
+
+class T2CorrectedFFT(FFT):
+    """ fast fourier transform operator matched to replicated continous FT"""
+
+    def __init__(self,
+                 x: npt.NDArray,
+                 t_readout: npt.NDArray,
+                 T2star: npt.NDArray,
+                 xp: types.ModuleType = np,
+                 dtype=complex) -> None:
+        super().__init__(x=x, xp=xp, dtype=dtype)
+
+        self._t_readout = t_readout
+        self._T2star = T2star
+
+        # precalculate the decay envelopes at the readout times
+        # assumes that readout time is a function of abs(k)
+        self._n = self.x.shape[0]
+        self._decay_envs = self.xp.zeros((self._n // 2 + 1, self._n))
+        self._masks = self.xp.zeros((self._n // 2 + 1, self._n))
+        for i, t in enumerate(t_readout[:(self._n // 2 + 1)]):
+            self._decay_envs[i, :] = np.exp(
+                self.xp.divide(-t,
+                               T2star,
+                               out=self.xp.zeros(self._n),
+                               where=(T2star > 0)))
+            self._masks[i, i] = 1
+            self._masks[i, -i] = 1
+
+    def forward(self, x: npt.NDArray) -> npt.NDArray:
+        y = np.zeros(self._n, dtype=self.xp.complex128)
+
+        for i in range(self._n // 2 + 1):
+            y += super().forward(
+                self._decay_envs[i, :] * x) * self._masks[i, :]
+
+        return y
+
+    def adjoint(self, y: npt.NDArray) -> npt.NDArray:
+        x = np.zeros(self._n, dtype=self.xp.complex128)
+
+        for i in range(self._n // 2 + 1):
+            x += super().adjoint(
+                self._masks[i, :] * y) * self._decay_envs[i, :]
+
+        return x
 
 
 class GradientOperator(LinearOperator):

@@ -5,19 +5,20 @@ import numpy.typing as npt
 import matplotlib.pyplot as plt
 
 from functions import SquareSignal, TriangleSignal, GaussSignal, CompoundAnalysticalFourierSignal, SquaredL2Norm, L2L1Norm
-from operators import FFT, GradientOperator
+from operators import FFT, GradientOperator, T2CorrectedFFT
 from algorithms import PDHG
 
 
 def t_of_k(k, factor: float = 1.):
-    return factor * 40 * np.abs(k) / 0.91391
+    return factor * 40 * xp.abs(k) / 0.91391
 
 
 class DiffMetric(abc.ABC):
 
-    def __init__(self, y: npt.NDArray, weights=None) -> None:
+    def __init__(self, y: npt.NDArray, weights=None, xp=np) -> None:
         self._y = y
         self._weights = None
+        self._xp = xp
 
     @abc.abstractmethod
     def _call_from_diff(self, d: npt.NDArray) -> float:
@@ -37,13 +38,13 @@ class DiffMetric(abc.ABC):
 class MSE(DiffMetric):
 
     def _call_from_diff(self, d: npt.NDArray) -> float:
-        return (np.conj(d) * d).sum().real
+        return (self._xp.conj(d) * d).sum().real
 
 
 class MAE(DiffMetric):
 
     def _call_from_diff(self, d: npt.NDArray) -> float:
-        return np.abs(d).sum()
+        return self._xp.abs(d).sum()
 
 
 if __name__ == '__main__':
@@ -57,10 +58,11 @@ if __name__ == '__main__':
     rho = 1e2
     prior = 'L1L2Norm'
     #prior = 'SquaredL2Norm'
-    betas = np.logspace(-1, 2, 13)
+    betas = xp.logspace(-1, 2, 9)
     T2star_factor = 1.
-    readout_time_factor = 1 / 4
+    readout_time_factor = 1 / 1
     seed = 2
+    model_T2star = True
 
     #-------------------------------------------------------------------
     #-------------------------------------------------------------------
@@ -119,7 +121,7 @@ if __name__ == '__main__':
         t_readout[i] = t_r
         noise_free_data[i] = signal.continous_ft(kk, t=t_r)
 
-    scaled_noise_level = noise_level / np.sqrt(readout_time_factor)
+    scaled_noise_level = noise_level / xp.sqrt(readout_time_factor)
 
     data = noise_free_data.copy() + scaled_noise_level * xp.random.randn(
         *noise_free_data.shape) + 1j * noise_level * xp.random.randn(
@@ -135,16 +137,22 @@ if __name__ == '__main__':
     #-----------------------------------------------------------------------------------------------------------------
     recon1 = fft.inverse(data)
 
+    if model_T2star:
+        data_operator = T2CorrectedFFT(x, t_readout, signal.T2star(x), xp=xp)
+    else:
+        data_operator = fft
+
     data_distance = SquaredL2Norm(xp, scale=1.0, shift=data)
 
     prior_operator = GradientOperator(x.shape, xp=xp)
 
-    fft_norm = fft.norm(num_iter=200)
+    data_operator_norm = data_operator.norm(num_iter=200)
 
-    pdhg_recons = np.zeros((len(betas), n), dtype=np.complex128)
-    pdhg_costs = np.zeros((len(betas), num_iter), dtype=np.float64)
+    pdhg_recons = xp.zeros((len(betas), n), dtype=xp.complex128)
+    pdhg_costs = xp.zeros((len(betas), num_iter), dtype=xp.float64)
 
     for i, beta in enumerate(betas):
+        print(f'{i+1}/{betas.size}')
         if prior == 'SquaredL2Norm':
             prior_norm = SquaredL2Norm(xp, scale=beta)
         elif prior == 'L1L2Norm':
@@ -152,10 +160,10 @@ if __name__ == '__main__':
         else:
             raise ValueError
 
-        pdhg = PDHG(data_operator=fft,
+        pdhg = PDHG(data_operator=data_operator,
                     data_distance=data_distance,
-                    sigma=0.5 * rho / fft_norm,
-                    tau=0.5 / (rho * fft_norm),
+                    sigma=0.5 * rho / data_operator_norm,
+                    tau=0.5 / (rho * data_operator_norm),
                     prior_operator=prior_operator,
                     prior_functional=prior_norm)
         pdhg.run(num_iter, verbose=False, calculate_cost=True)
@@ -168,10 +176,10 @@ if __name__ == '__main__':
     #-----------------------------------------------------------------------------------------------------------------
     #-----------------------------------------------------------------------------------------------------------------
     s_true = signal.signal(x)
-    #weights = (s_true.real > 0).astype(np.float64)
+    #weights = (s_true.real > 0).astype(xp.float64)
     weights = None
-    metrics_dict = dict(MSE=MSE(y=s_true, weights=weights),
-                        MAE=MAE(y=s_true, weights=weights))
+    metrics_dict = dict(MSE=MSE(y=s_true, weights=weights, xp=xp),
+                        MAE=MAE(y=s_true, weights=weights, xp=xp))
     results = {}
 
     for key, metric in metrics_dict.items():
@@ -185,7 +193,7 @@ if __name__ == '__main__':
 
     xx = xp.linspace(-x0, x0, 1000, endpoint=False)
     kk = xp.linspace(k.min(), k.max(), 1000, endpoint=False)
-    it = np.arange(1, num_iter + 1)
+    it = xp.arange(1, num_iter + 1)
 
     fig, ax = plt.subplots(1, 5, figsize=(16, 4))
     ax[0].plot(xx, signal.signal(xx).real, 'k-', lw=0.5)
@@ -228,7 +236,7 @@ if __name__ == '__main__':
                              figsize=(3 * len(metrics_dict), 3 * 3))
     i = 0
     for key, metric in results.items():
-        imin = np.argmin(metric)
+        imin = xp.argmin(metric)
         print(
             f'{key}:   opt.beta: {betas[imin]:.2e}   opt.value: {metric[imin]:.2e}'
         )
