@@ -1,5 +1,8 @@
 """script to understand sampliong of fourier space and discrete FT better"""
 import abc
+from pathlib import Path
+import json
+import h5py
 import numpy as np
 import numpy.typing as npt
 from scipy.interpolate import interp1d
@@ -70,22 +73,25 @@ if __name__ == '__main__':
     parser.add_argument('--prior',
                         default='L1L2Norm',
                         choices=['L1L2Norm', 'SquaredL2Norm'])
+    parser.add_argument('--seed', default=2, type=int)
+
     args = parser.parse_args()
 
     xp = np
 
+    noise_level = args.noise_level
+    prior = args.prior
+    seed = args.seed
+
     n = 64
     x0 = 110
-    noise_level = args.noise_level
     num_iter = 4000
-    rho = 1e1
-    prior = args.prior
+    rho = 10.
     betas = xp.logspace(-1, 2, 9)
     T2star_factor = 1.
     readout_time_factor = 1 / args.gradient_factor
-    seed = 2
     model_T2star = True
-    verbose = False
+    verbose = True
 
     #-------------------------------------------------------------------
     #-------------------------------------------------------------------
@@ -163,7 +169,7 @@ if __name__ == '__main__':
     # inverse fourier transform reconstruction
     #-----------------------------------------------------------------------------------------------------------------
     #-----------------------------------------------------------------------------------------------------------------
-    recon1 = fft.inverse(data)
+    recon_ifft = fft.inverse(data)
 
     if model_T2star:
         data_operator = T2CorrectedFFT(x,
@@ -222,6 +228,32 @@ if __name__ == '__main__':
 
     #-----------------------------------------------------------------------------------------------------------------
     #-----------------------------------------------------------------------------------------------------------------
+    # save results
+    #-----------------------------------------------------------------------------------------------------------------
+    #-----------------------------------------------------------------------------------------------------------------
+
+    res_file = Path(
+        'results'
+    ) / f'nl{noise_level}_gf{args.gradient_factor}_{prior}_s{seed}.h5'
+
+    with h5py.File(res_file, 'w') as f:
+        f.create_dataset('betas', data=betas)
+        f.create_dataset('x', data=x)
+        f.create_dataset('k', data=k)
+        f.create_dataset('signal', data=signal.signal(x))
+        f.create_dataset('noise_free_data', data=noise_free_data)
+        f.create_dataset('data', data=data)
+        f.create_dataset('recon_ifft', data=recon_ifft)
+        f.create_dataset('pdhg_recons', data=pdhg_recons)
+        f.create_dataset('pdhg_costs', data=pdhg_costs)
+        f.create_dataset('T2star', data=signal.T2star(x))
+        f.create_dataset('t_readout', data=t_readout)
+        for key, metric in results.items():
+            f.create_dataset(f'metrics/{key}', data=metric)
+        f.attrs['header'] = json.dumps(args.__dict__)
+
+    #-----------------------------------------------------------------------------------------------------------------
+    #-----------------------------------------------------------------------------------------------------------------
     # plots
     #-----------------------------------------------------------------------------------------------------------------
     #-----------------------------------------------------------------------------------------------------------------
@@ -230,36 +262,39 @@ if __name__ == '__main__':
     kk = xp.linspace(k.min(), k.max(), 1000, endpoint=False)
     it = xp.arange(1, num_iter + 1)
 
-    fig, ax = plt.subplots(1, 5, figsize=(16, 4))
-    ax[0].plot(xx, signal.signal(xx).real, 'k-', lw=0.5)
-    ax[1].plot(xx, signal.signal(xx).imag, 'k-', lw=0.5)
-    ax[0].plot(x, recon1.real, '-', lw=0.8)
-    ax[1].plot(x, recon1.imag, '-', lw=0.8, label='IFFT')
-    for i, beta in enumerate(betas):
-        ax[0].plot(x, pdhg_recons[i, :].real, '-', lw=0.8)
-        ax[1].plot(x,
-                   pdhg_recons[i, :].imag,
-                   '-',
-                   lw=0.8,
-                   label=f'{prior} {beta:.1e}',
-                   color=plt.cm.tab10((i + 1) % 10))
+    fig, ax = plt.subplots(2, 3, figsize=(12, 8))
+    ax[0, 0].plot(xx, signal.signal(xx).real, 'k-', lw=0.5)
+    ax[0, 0].plot(xx, signal.signal(xx).real, 'k-', lw=0.5)
+    ax[0, 0].plot(x, recon_ifft.real, '-', lw=0.8)
+    ax[0, 0].plot(x, recon_ifft.imag, '-', lw=0.8)
 
-    ax[2].plot(kk, signal.continous_ft(kk).real, 'k-', lw=0.5)
-    ax[2].plot(k, noise_free_data.real, 'x', ms=4)
-    ax[2].plot(k, data.real, '.', ms=4)
+    ax[0, 1].plot(xx, signal.signal(xx).real, 'k-', lw=0.5)
+    ax[0, 2].plot(xx, signal.signal(xx).imag, 'k-', lw=0.5)
+    for i, beta in enumerate(betas):
+        ax[0, 1].plot(x, pdhg_recons[i, :].real, '-', lw=0.8)
+        ax[0, 2].plot(x,
+                      pdhg_recons[i, :].imag,
+                      '-',
+                      lw=0.8,
+                      label=f'{prior} {beta:.1e}')
+
+    ax[1, 0].plot(kk, signal.continous_ft(kk).real, 'k-', lw=0.5)
+    ax[1, 0].plot(k, noise_free_data.real, 'x', ms=4)
+    ax[1, 0].plot(k, data.real, '.', ms=4)
 
     for i, beta in enumerate(betas):
-        ax[3].loglog(it, pdhg_costs[i, ...], color=plt.cm.tab10((i + 1) % 10))
+        ax[1, 1].loglog(it, pdhg_costs[i, ...])
 
     for axx in ax.ravel():
         axx.grid(ls=':')
-    ax[1].set_ylim(*ax[0].get_ylim())
-    ax[1].legend()
+    ax[0, 2].set_ylim(*ax[0, 0].get_ylim())
+    ax[0, 2].legend(ncol=2, fontsize='small')
 
-    ax[4].plot(k, t_readout, '.')
+    ax[1, 2].plot(k, t_readout, '.')
 
     fig.tight_layout()
     fig.show()
+    fig.savefig(res_file.parent / f'{res_file.stem}_fig1.png')
 
     #-----------------------------------------------------------------------------------------------------------------
     #-----------------------------------------------------------------------------------------------------------------
@@ -292,16 +327,28 @@ if __name__ == '__main__':
 
     fig2.tight_layout()
     fig2.show()
+    fig2.savefig(res_file.parent / f'{res_file.stem}_fig2.png')
 
-    fig3, ax3 = plt.subplots(1, 3, figsize=(9, 3))
+    fig3, ax3 = plt.subplots(1, 4, figsize=(12, 3))
     ax3[0].plot(xx, signal.signal(xx, t=0).real, '-', lw=0.5)
     ax3[0].plot(xx, signal.signal(xx, t=t_readout.max() / 2).real, '-', lw=0.5)
     ax3[0].plot(xx, signal.signal(xx, t=t_readout.max()).real, '-', lw=0.5)
     ax3[1].plot(xx, signal.signal(xx, t=0).imag, '-', lw=0.5)
     ax3[1].plot(xx, signal.signal(xx, t=t_readout.max() / 2).imag, '-', lw=0.5)
     ax3[1].plot(xx, signal.signal(xx, t=t_readout.max()).imag, '-', lw=0.5)
-    ax3[2].plot(xx, signal.T2star(xx), '-', lw=0.5)
-    ax3[0].grid(ls=':')
-    ax3[1].grid(ls=':')
+    ax3[2].plot(kk, signal.continous_ft(kk, t=0).real, '-', lw=0.5)
+    ax3[2].plot(kk,
+                signal.continous_ft(kk, t=t_readout.max() / 2).real,
+                '-',
+                lw=0.5)
+    ax3[2].plot(kk,
+                signal.continous_ft(kk, t=t_readout.max()).real,
+                '-',
+                lw=0.5)
+    ax3[2].plot(k, noise_free_data.real, 'bx', ms=2)
+    ax3[3].plot(xx, signal.T2star(xx), '-', lw=0.5)
+    for axx in ax3.ravel():
+        axx.grid(ls=':')
     fig3.tight_layout()
     fig3.show()
+    fig3.savefig(res_file.parent / f'{res_file.stem}_fig3.png')
