@@ -2,6 +2,7 @@ import abc
 import types
 import numpy as np
 import numpy.typing as npt
+import pynufft
 
 try:
     import cupy as cp
@@ -19,7 +20,7 @@ class LinearOperator(abc.ABC):
                  xp: types.ModuleType,
                  input_dtype: type | None = None,
                  output_dtype: type | None = None) -> None:
-        """Linear operator abstract base class that maps real array x to real array y
+        """Linear operator abstract base class that maps real or complex array x to y
 
         Parameters
         ----------
@@ -333,3 +334,144 @@ class GradientOperator(LinearOperator):
             d -= self.xp.diff(tmp, axis=i, prepend=0)
 
         return d
+
+
+class MultiChannelNonCartesianMRAcquisitionModel(LinearOperator):
+    """acquisition model for multi channel MR with non cartesian stacked sampling using pynufft"""
+
+    def __init__(self,
+                 input_shape: tuple[int, ...],
+                 coil_sensitivities: npt.NDArray,
+                 k_space_sample_points: npt.NDArray,
+                 interpolation_size: None | tuple[int, ...] = None,
+                 scaling_factor: float = 1.,
+                 device_number=0) -> None:
+        """
+        Parameters 
+        ----------
+ 
+        input_shape : tuple[int, ...]
+            shape of the complex input image
+        coil_sensitivities : npt.NDArray
+            the complex coil sensitivities, shape (num_channels, image_shape)
+        interpolation_size: tuple(int,int,int), optional
+            interpolation size for nufft, default None which means 6 in all directions
+        scaling_factor: float, optional
+            extra scaling factor applied to the adjoint, default 1
+        device_number: int, optional
+            device from pynuffts device list to use, default 0
+        """
+
+        self._coil_sensitivities = coil_sensitivities
+        self._num_channels = coil_sensitivities.shape[0]
+        self._scaling_factor = scaling_factor
+
+        self._kspace_sample_points = k_space_sample_points
+
+        # size of the oversampled kspace grid
+        self._Kd = tuple(2 * x for x in input_shape)
+        # the adjoint from pynufft needs to be scaled by this factor
+        self._adjoint_scaling_factor = np.prod(self._Kd)
+
+        if interpolation_size is None:
+            self._interpolation_size = len(input_shape) * (6, )
+        else:
+            self._interpolation_size = interpolation_size
+
+        self._device_number = device_number
+        self._device = pynufft.helper.device_list()[self._device_number]
+
+        # setup a nufft object for every stack
+        self._nufft = pynufft.NUFFT(self._device)
+        self._nufft.plan(self.kspace_sample_points, input_shape, self._Kd,
+                         self._interpolation_size)
+
+        super().__init__(input_shape=input_shape,
+                         output_shape=(self._num_channels,
+                                       self._kspace_sample_points.shape[0]),
+                         xp=np,
+                         input_dtype=np.complex128,
+                         output_dtype=np.complex128)
+
+    def __del__(self) -> None:
+        del self._nufft
+
+    @property
+    def num_channels(self) -> int:
+        """
+        Returns
+        -------
+        int
+            number of channels (coils)
+        """
+        return self._num_channels
+
+    @property
+    def coil_sensitivities(self) -> npt.NDArray:
+        """
+        Returns
+        -------
+        npt.NDArray
+            array of coil sensitivities
+        """
+        return self._coil_sensitivities
+
+    @property
+    def kspace_sample_points(self) -> npt.NDArray:
+        """
+        Returns
+        -------
+        npt.NDArray
+            the kspace sample points
+        """
+        return self._kspace_sample_points
+
+    def forward(self, x: npt.NDArray) -> npt.NDArray:
+        """forward method
+
+        Parameters
+        ----------
+        x : npt.NDArray
+            (pseudo-complex) image with shape (image_shape,2)
+
+        Returns
+        -------
+        npt.NDArray
+            (pseudo-complex) data y with shape (num_channels,num_kspace_points,2)
+        """
+
+        y = np.zeros(self.output_shape, dtype=self.output_dtype)
+
+        for i in range(self._num_channels):
+            y[i,
+              ...] = self._nufft.forward(self.coil_sensitivities[i, ...] * x)
+
+        if self._scaling_factor != 1:
+            y *= self._scaling_factor
+
+        return y
+
+    def adjoint(self, y: npt.NDArray) -> npt.NDArray:
+        """adjoint of forward method
+
+        Parameters
+        ----------
+        y : npt.NDArray
+            (pseudo-complex) data with shape (num_channels,num_kspace_points,2)
+
+        Returns
+        -------
+        npt.NDArray
+            (pseudo-complex) image x with shape (image_shape,2)
+        """
+        x = np.zeros(self.input_shape, dtype=self.input_dtype)
+
+        for i in range(self._num_channels):
+            x += np.conj(
+                self.coil_sensitivities[i, ...]) * self._nufft.adjoint(
+                    y[i, ...]) * self._adjoint_scaling_factor
+
+        if self._scaling_factor != 1:
+            x *= self._scaling_factor
+
+        return x
