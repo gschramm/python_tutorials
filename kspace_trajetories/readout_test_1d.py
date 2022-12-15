@@ -87,7 +87,7 @@ if __name__ == '__main__':
     x0 = 110
     num_iter = 4000
     rho = 10.
-    betas = xp.logspace(-1, 2, 9)
+    betas = xp.logspace(-2, 2, 11)
     T2star_factor = 1.
     readout_time_factor = 1 / args.gradient_factor
     model_T2star = True
@@ -163,6 +163,7 @@ if __name__ == '__main__':
     print(f'readout time factor .: {readout_time_factor:.1e}')
     print(f'noise level         .: {noise_level:.1e}')
     print(f'scaled noise level  .: {scaled_noise_level:.1e}')
+    print(f'seed                .: {seed}')
 
     #-----------------------------------------------------------------------------------------------------------------
     #-----------------------------------------------------------------------------------------------------------------
