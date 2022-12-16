@@ -175,6 +175,48 @@ class LinearOperator(abc.ABC):
 
         return self.xp.sqrt(n)
 
+    def unravel_pseudo_complex(
+            self, x: npt.NDArray | cpt.NDArray) -> npt.NDArray | cpt.NDArray:
+        """unravel a real flattened pseudo-complex array into a complex array
+
+        Parameters
+        ----------
+        x : npt.NDArray | cpt.NDArray
+            real flattened array with size 2*prod(input_shape)
+
+        Returns
+        -------
+        npt.NDArray | cpt.NDArray
+            unraveled complex array
+        """
+
+        x = x.reshape(self.input_shape + (2, ))
+
+        if x.dtype == self.xp.float64:
+            return self.xp.squeeze(x.view(dtype=self.xp.complex128), axis=-1)
+        elif x.dtype == self.xp.float32:
+            return self.xp.squeeze(x.view(dtype=self.xp.complex64), axis=-1)
+        elif x.dtype == self.xp.float128:
+            return self.xp.squeeze(x.view(dtype=self.xp.complex256), axis=-1)
+        else:
+            raise ValueError(
+                'Input must have dtyoe float32, float64 or float128')
+
+    def ravel_pseudo_complex(
+            self, x: npt.NDArray | cpt.NDArray) -> npt.NDArray | cpt.NDArray:
+        """ravel a complex array into a flattened pesudo complex array
+
+        Parameters
+        ----------
+        x : npt.NDArray | cpt.NDArray
+            complex array of shape input_shape
+        Returns
+        -------
+        npt.NDArray | cpt.NDArray
+            ravel pesudo complex array of shape 2*prod(input_shape)
+        """
+        return self.xp.stack([x.real, x.imag], axis=-1).ravel()
+
 
 class FFT(LinearOperator):
     """ fast fourier transform operator matched to replicated continous FT"""
