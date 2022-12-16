@@ -1,7 +1,7 @@
 """demo to show how to simulate non-uniform kspace data and on how to reconstruct them via conjugate gradient"""
 
 import numpy as np
-from scipy.optimize import fmin_cg
+from scipy.optimize import fmin_cg, fmin_l_bfgs_b
 import matplotlib.pyplot as plt
 
 from operators import MultiChannelStackedNonCartesianMRAcquisitionModel, GradientOperator
@@ -9,10 +9,10 @@ from kspace_trajectories import radial_2d_golden_angle
 from functions import SquaredL2Norm
 
 if __name__ == '__main__':
-    recon_shape = (4, 512, 512)
-    num_iterations = 100
+    recon_shape = (4, 256, 256)
+    num_iterations = 20
     undersampling_factor = 32
-    beta = 3e7
+    beta = 1e6
 
     num_spokes = int(recon_shape[1] * np.pi / 2) // undersampling_factor
     num_samples_per_spoke = recon_shape[0]
