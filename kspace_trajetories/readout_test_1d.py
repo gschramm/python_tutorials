@@ -87,11 +87,15 @@ if __name__ == '__main__':
     x0 = 110
     num_iter = 4000
     rho = 10.
-    betas = xp.logspace(-2, 2, 11)
     T2star_factor = 1.
     readout_time_factor = 1 / args.gradient_factor
     model_T2star = True
     verbose = True
+
+    if prior == 'L1L2Norn':
+        betas = xp.logspace(-2, 3, 13)
+    elif prior == 'SquaredL2Norm':
+        betas = xp.logspace(-1, 4, 13)
 
     #-------------------------------------------------------------------
     #-------------------------------------------------------------------
