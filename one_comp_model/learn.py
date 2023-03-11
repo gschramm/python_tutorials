@@ -73,7 +73,7 @@ def generate_random_PET(C_A: fcts.ExpConvFunction, Vt=1.):
 
 class IF_1TCM_DataSet(torch.utils.data.Dataset):
 
-    def __init__(self, tmax=8, num_t=12 * 8, num_reg=3, dtype=torch.float32):
+    def __init__(self, tmax=8, num_t=12 * 8, num_reg=2, dtype=torch.float32):
         self._tmax = tmax
         self._num_t = num_t
         self._t = torch.linspace(0, tmax, num_t, dtype=dtype)
@@ -83,6 +83,10 @@ class IF_1TCM_DataSet(torch.utils.data.Dataset):
     @property
     def t(self) -> torch.Tensor:
         return self._t
+
+    @property
+    def num_reg(self) -> int:
+        return self._num_reg
 
     def __len__(self) -> int:
         return 10000
@@ -100,16 +104,23 @@ class IF_1TCM_DataSet(torch.utils.data.Dataset):
 
 if __name__ == '__main__':
 
+    batch_size = 5
     ds = IF_1TCM_DataSet()
 
-    while True:
-        cp, ca = ds.__getitem__(0)
+    data_loader = torch.utils.data.DataLoader(ds, batch_size=batch_size)
 
-        fig, ax = plt.subplots()
-        ax.plot(ds.t, ca, '.-')
-        ax.plot(ds.t, cp[0, :], '.-')
-        ax.plot(ds.t, cp[1, :], '.-')
-        ax.plot(ds.t, cp[2, :], '.-')
+    while True:
+        cp, ca = next(iter(data_loader))
+
+        fig, ax = plt.subplots(1,
+                               batch_size,
+                               sharey=True,
+                               figsize=(batch_size * 3, 3))
+        for i in range(batch_size):
+            ax[i].plot(ds.t, ca[i, :], '.-')
+            for j in range(ds.num_reg):
+                ax[i].plot(ds.t, cp[i, j, :], '.-')
+        fig.tight_layout()
         fig.show()
 
         tmp = input("Continue?")
