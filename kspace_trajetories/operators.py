@@ -139,8 +139,8 @@ class LinearOperator(abc.ABC):
         x_fwd = self.forward(x)
         y_back = self.adjoint(y)
 
-        a = (np.conj(y) * x_fwd).sum()
-        b = (np.conj(y_back) * x).sum()
+        a = (self.xp.conj(y) * x_fwd).sum()
+        b = (self.xp.conj(y_back) * x).sum()
 
         if verbose:
             print(f'<y, A x>   {a}')
@@ -238,8 +238,8 @@ class FFT(LinearOperator):
         self._dx = float(x[1] - x[0])
         self._x = x
         self._phase_factor = self.dx * xp.exp(-1j * self.k * float(x[0]))
-        self._scale_factor = float(np.sqrt(x.size / (2 * np.pi)))
-        self._adjoint_factor = float((np.abs(x[0])**2) / ((x.size / 2)**2))
+        self._scale_factor = float(self.xp.sqrt(x.size / (2 * self.xp.pi)))
+        self._adjoint_factor = float((self.xp.abs(x[0])**2) / ((x.size / 2)**2))
 
     @property
     def x(self) -> npt.NDArray:
@@ -413,7 +413,7 @@ class MultiChannelNonCartesianMRAcquisitionModel(LinearOperator):
         # size of the oversampled kspace grid
         self._Kd = tuple(2 * x for x in input_shape)
         # the adjoint from pynufft needs to be scaled by this factor
-        self._adjoint_scaling_factor = np.prod(self._Kd)
+        self._adjoint_scaling_factor = self.xp.prod(self._Kd)
 
         if interpolation_size is None:
             self._interpolation_size = len(input_shape) * (6, )
@@ -432,8 +432,8 @@ class MultiChannelNonCartesianMRAcquisitionModel(LinearOperator):
                          output_shape=(self._num_channels,
                                        self._kspace_sample_points.shape[0]),
                          xp=np,
-                         input_dtype=np.complex64,
-                         output_dtype=np.complex64)
+                         input_dtype=self.xp.complex64,
+                         output_dtype=self.xp.complex64)
 
     def __del__(self) -> None:
         del self._nufft
@@ -482,7 +482,7 @@ class MultiChannelNonCartesianMRAcquisitionModel(LinearOperator):
             (pseudo-complex) data y with shape (num_channels,num_kspace_points,2)
         """
 
-        y = np.zeros(self.output_shape, dtype=self.output_dtype)
+        y = self.xp.zeros(self.output_shape, dtype=self.output_dtype)
 
         for i in range(self._num_channels):
             y[i,
@@ -506,10 +506,10 @@ class MultiChannelNonCartesianMRAcquisitionModel(LinearOperator):
         npt.NDArray
             (pseudo-complex) image x with shape (image_shape,2)
         """
-        x = np.zeros(self.input_shape, dtype=self.input_dtype)
+        x = self.xp.zeros(self.input_shape, dtype=self.input_dtype)
 
         for i in range(self._num_channels):
-            x += np.conj(
+            x += self.xp.conj(
                 self.coil_sensitivities[i, ...]) * self._nufft.adjoint(
                     y[i, ...]) * self._adjoint_scaling_factor
 
@@ -556,7 +556,7 @@ class MultiChannelStackedNonCartesianMRAcquisitionModel(LinearOperator):
         # size of the oversampled kspace grid
         self._Kd = tuple(2 * x for x in input_shape[1:])
         # the adjoint from pynufft needs to be scaled by this factor
-        self._adjoint_scaling_factor = np.prod(self._Kd)
+        self._adjoint_scaling_factor = self.xp.prod(self._Kd)
 
         if interpolation_size is None:
             self._interpolation_size = (6, 6)
@@ -575,8 +575,8 @@ class MultiChannelStackedNonCartesianMRAcquisitionModel(LinearOperator):
                          output_shape=(self._num_channels, input_shape[0],
                                        self._kspace_sample_points.shape[0]),
                          xp=np,
-                         input_dtype=np.complex64,
-                         output_dtype=np.complex64)
+                         input_dtype=self.xp.complex64,
+                         output_dtype=self.xp.complex64)
 
     def __del__(self) -> None:
         del self._nufft_2d
@@ -625,11 +625,11 @@ class MultiChannelStackedNonCartesianMRAcquisitionModel(LinearOperator):
             (pseudo-complex) data y with shape (num_channels,num_kspace_points,2)
         """
 
-        y = np.zeros(self.output_shape, dtype=self.output_dtype)
+        y = self.xp.zeros(self.output_shape, dtype=self.output_dtype)
 
         for i in range(self._num_channels):
             # perform a 1D FFT along the "stack axis"
-            tmp = np.fft.fftshift(np.fft.fftn(np.fft.fftshift(
+            tmp = self.xp.fft.fftshift(self.xp.fft.fftn(self.xp.fft.fftshift(
                 self.coil_sensitivities[i, ...] * x, axes=0),
                                               axes=[0]),
                                   axes=0)
@@ -656,7 +656,7 @@ class MultiChannelStackedNonCartesianMRAcquisitionModel(LinearOperator):
         npt.NDArray
             (pseudo-complex) image x with shape (image_shape,2)
         """
-        x = np.zeros(self.input_shape, dtype=self.input_dtype)
+        x = self.xp.zeros(self.input_shape, dtype=self.input_dtype)
 
         for i in range(self._num_channels):
             tmp = self.xp.zeros(self.input_shape, dtype=self.input_dtype)
@@ -664,8 +664,8 @@ class MultiChannelStackedNonCartesianMRAcquisitionModel(LinearOperator):
             for k in range(self.input_shape[0]):
                 tmp[k, ...] = self._nufft_2d.adjoint(y[i, k, ...])
 
-            x += np.conj(self.coil_sensitivities[i, ...]) * np.fft.ifftshift(
-                np.fft.ifftn(np.fft.ifftshift(tmp, axes=0), axes=[0]), axes=0)
+            x += self.xp.conj(self.coil_sensitivities[i, ...]) * self.xp.fft.ifftshift(
+                self.xp.fft.ifftn(self.xp.fft.ifftshift(tmp, axes=0), axes=[0]), axes=0)
 
         # when using numpy's fftn with the default normalization
         # we have to multiply the inverse with input_shape[0] to get the adjoint
