@@ -73,11 +73,17 @@ def generate_random_PET(C_A: fcts.ExpConvFunction, Vt=1.):
 
 class IF_1TCM_DataSet(torch.utils.data.Dataset):
 
-    def __init__(self, tmax=8, num_t=12 * 8, num_reg=4, dtype=torch.float32):
+    def __init__(self,
+                 tmax=8,
+                 num_t=12 * 8,
+                 num_reg=4,
+                 nl=0.1,
+                 dtype=torch.float32):
         self._tmax = tmax
         self._num_t = num_t
         self._t = torch.linspace(0, tmax, num_t, dtype=dtype)
         self._num_reg = num_reg
+        self._nl = nl
         self._dtype = dtype
 
     @property
@@ -103,7 +109,13 @@ class IF_1TCM_DataSet(torch.utils.data.Dataset):
         for i in range(self._num_reg):
             c_pet[i, :] = generate_random_PET(C_A)(self._t)
 
-        return c_pet, C_A(self._t).expand(1, -1)
+        scale = c_pet.max()
+
+        c_pet /= scale
+
+        c_pet += self._nl * torch.randn(c_pet.shape, dtype=self._dtype)
+
+        return c_pet, C_A(self._t).expand(1, -1) / scale
 
 
 def training_loop(dataloader, model, loss_fn, optimizer, device):
@@ -153,7 +165,9 @@ if __name__ == '__main__':
     model = torch.nn.Sequential(
         torch.nn.Conv1d(ds.num_reg, 1, kernel_size=1, padding='same'),
         torch.nn.Linear(ds.num_t, 32), torch.nn.Linear(32, 8),
-        torch.nn.Linear(8, 2), torch.nn.Linear(2, 8), torch.nn.Linear(8, 32),
+        torch.nn.Linear(8, 8), torch.nn.Linear(8, 8), torch.nn.Linear(8, 8),
+        torch.nn.Linear(8, 8), torch.nn.Linear(8, 8), torch.nn.Linear(8, 8),
+        torch.nn.Linear(8, 8), torch.nn.Linear(8, 8), torch.nn.Linear(8, 32),
         torch.nn.Linear(32, ds.num_t))
     model = model.to(device)
 
