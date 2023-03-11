@@ -2,8 +2,11 @@ import abc
 import functools
 import numpy as np
 import numpy.typing as npt
+import torch
+
 
 class Function(abc.ABC):
+
     def __init__(self) -> None:
         self._scale = 1.
 
@@ -16,15 +19,19 @@ class Function(abc.ABC):
         self._scale = value
 
     @abc.abstractmethod
-    def _call(self, t: npt.NDArray) -> npt.NDArray:
+    def _call(self,
+              t: npt.NDArray | torch.Tensor) -> npt.NDArray | torch.Tensor:
         raise NotImplementedError
 
-    def __call__(self, t: float | npt.NDArray) -> float | npt.NDArray:
-        if not isinstance(t,np.ndarray):
+    def __call__(
+        self, t: float | npt.NDArray | torch.Tensor
+    ) -> float | npt.NDArray | torch.Tensor:
+        if not (isinstance(t, np.ndarray) or isinstance(t, torch.Tensor)):
             t = np.array([t])
-        
+
         res = self.scale * self._call(t)
-        if isinstance(res,np.ndarray) and (res.shape[0] == 1):
+        if (isinstance(res, np.ndarray)
+                or isinstance(res, torch.Tensor)) and (res.shape[0] == 1):
             res = res[0]
 
         return res
@@ -44,6 +51,7 @@ class IntegrableFunction(Function):
         f.scale *= self.scale
         return f
 
+
 class ExpConvFunction(IntegrableFunction):
     """function where convolution with exp(-kt) kernel is known"""
 
@@ -56,8 +64,10 @@ class ExpConvFunction(IntegrableFunction):
         f.scale *= self.scale
         return f
 
+
 class SumFunction(Function):
     """sum of functions"""
+
     def __init__(self, funcs: list[Function]):
         self._funcs = funcs
         super().__init__()
@@ -67,12 +77,12 @@ class SumFunction(Function):
         return self._funcs
 
     def _call(self, t: npt.NDArray) -> npt.NDArray:
-        return functools.reduce(lambda a, b: a + b,
-                                [z(t) for z in self.funcs])
+        return functools.reduce(lambda a, b: a + b, [z(t) for z in self.funcs])
 
 
 class IntegrableSumFunction(IntegrableFunction):
     """sum of integrable functions"""
+
     def __init__(self, funcs: list[IntegrableFunction]):
         self._funcs = funcs
         super().__init__()
@@ -82,8 +92,8 @@ class IntegrableSumFunction(IntegrableFunction):
         return self._funcs
 
     def _call(self, t: npt.NDArray) -> npt.NDArray:
-        return functools.reduce(lambda a, b: a + b,
-                                [z(t) for z in self.funcs])
+        return functools.reduce(lambda a, b: a + b, [z(t) for z in self.funcs])
+
     @property
     def _indefinite_integral(self) -> SumFunction:
         return SumFunction([z.indefinite_integral for z in self._funcs])
@@ -91,6 +101,7 @@ class IntegrableSumFunction(IntegrableFunction):
 
 class ExpConvSumFunction(ExpConvFunction):
     """sum of integrable functions"""
+
     def __init__(self, funcs: list[ExpConvFunction]):
         self._funcs = funcs
         super().__init__()
@@ -100,41 +111,47 @@ class ExpConvSumFunction(ExpConvFunction):
         return self._funcs
 
     def _call(self, t: npt.NDArray) -> npt.NDArray:
-        return functools.reduce(lambda a, b: a + b,
-                                [z(t) for z in self.funcs])
+        return functools.reduce(lambda a, b: a + b, [z(t) for z in self.funcs])
+
     @property
     def _indefinite_integral(self) -> IntegrableSumFunction:
-        return IntegrableSumFunction([z.indefinite_integral for z in self._funcs])
+        return IntegrableSumFunction(
+            [z.indefinite_integral for z in self._funcs])
 
     def _expconv(self, k2: float) -> IntegrableSumFunction:
         return IntegrableSumFunction([z.expconv(k2) for z in self._funcs])
 
+
 #---------------------------------------------------------------------------
 
+
 class PowerFunction(IntegrableFunction):
+
     def __init__(self, power: float) -> None:
         if power == -1:
             raise ValueError
 
         self._power = power
         super().__init__()
-    
+
     @property
     def power(self) -> float:
         return self._power
 
-    def _call(self, t: npt.NDArray) -> npt.NDArray:
+    def _call(self,
+              t: npt.NDArray | torch.Tensor) -> npt.NDArray | torch.Tensor:
         return t**self.power
 
     @property
     def _indefinite_integral(self) -> Function:
         f = PowerFunction(self.power + 1)
-        f.scale = 1/(self.power + 1)
+        f.scale = 1 / (self.power + 1)
         return f
 
 
 class ExpDecayFunction(ExpConvFunction):
-    def __init__(self, alpha : float):
+
+    def __init__(self, alpha: float):
         if alpha < 0:
             raise ValueError
         self._alpha = alpha
@@ -144,13 +161,18 @@ class ExpDecayFunction(ExpConvFunction):
     def alpha(self) -> float:
         return self._alpha
 
-    def _call(self, t: npt.NDArray):
-        return np.exp(-self.alpha*t)
+    def _call(self,
+              t: npt.NDArray | torch.Tensor) -> npt.NDArray | torch.Tensor:
+
+        if isinstance(t, np.ndarray):
+            return np.exp(-self.alpha * t)
+        elif isinstance(t, torch.Tensor):
+            return torch.exp(-self.alpha * t)
 
     @property
     def _indefinite_integral(self) -> Function:
         f = ExpDecayFunction(self.alpha)
-        f.scale =  -1/self.alpha
+        f.scale = -1 / self.alpha
         return f
 
     def _expconv(self, k2: float) -> IntegrableFunction:
@@ -170,8 +192,14 @@ class ExpDecayFunction(ExpConvFunction):
 
 
 class PlateauFunction(ExpConvFunction):
-    def _call(self, t: npt.NDArray):
-        return np.ones(t.size)
+
+    def _call(self, t: npt.NDArray | torch.Tensor):
+        if isinstance(t, np.ndarray):
+            return np.ones_like(t)
+        elif isinstance(t, torch.Tensor):
+            return torch.ones_like(t)
+        else:
+            raise ValueError
 
     @property
     def _indefinite_integral(self) -> Function:
@@ -188,5 +216,3 @@ class PlateauFunction(ExpConvFunction):
         f2.scale = -s
 
         return IntegrableSumFunction([f1, f2])
-
-
