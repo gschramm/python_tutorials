@@ -71,21 +71,45 @@ def generate_random_PET(C_A: fcts.ExpConvFunction, Vt=1.):
     return C_PET
 
 
+class IF_1TCM_DataSet(torch.utils.data.Dataset):
+
+    def __init__(self, tmax=8, num_t=12 * 8, num_reg=3, dtype=torch.float32):
+        self._tmax = tmax
+        self._num_t = num_t
+        self._t = torch.linspace(0, tmax, num_t, dtype=dtype)
+        self._num_reg = num_reg
+        self._dtype = dtype
+
+    @property
+    def t(self) -> torch.Tensor:
+        return self._t
+
+    def __len__(self) -> int:
+        return 10000
+
+    def __getitem__(self, idx: int):
+        C_A = generate_random_IF()
+
+        c_pet = torch.zeros(self._num_reg, self._num_t, dtype=self._dtype)
+
+        for i in range(self._num_reg):
+            c_pet[i, :] = generate_random_PET(C_A)(self._t)
+
+        return c_pet, C_A(self._t)
+
+
 if __name__ == '__main__':
-    tt = torch.linspace(0, 8, 8 * 12, dtype=torch.float64)
+
+    ds = IF_1TCM_DataSet()
 
     while True:
-        # generate random input function
-        C_A1 = generate_random_IF()
-        C_PET1 = generate_random_PET(C_A1)
-        C_PET2 = generate_random_PET(C_A1)
-        C_PET3 = generate_random_PET(C_A1)
+        cp, ca = ds.__getitem__(0)
 
         fig, ax = plt.subplots()
-        ax.plot(tt, C_A1(tt), '.-')
-        ax.plot(tt, C_PET1(tt), '.-')
-        ax.plot(tt, C_PET2(tt), '.-')
-        ax.plot(tt, C_PET3(tt), '.-')
+        ax.plot(ds.t, ca, '.-')
+        ax.plot(ds.t, cp[0, :], '.-')
+        ax.plot(ds.t, cp[1, :], '.-')
+        ax.plot(ds.t, cp[2, :], '.-')
         fig.show()
 
         tmp = input("Continue?")
