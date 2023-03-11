@@ -73,7 +73,7 @@ def generate_random_PET(C_A: fcts.ExpConvFunction, Vt=1.):
 
 class IF_1TCM_DataSet(torch.utils.data.Dataset):
 
-    def __init__(self, tmax=8, num_t=12 * 8, num_reg=2, dtype=torch.float32):
+    def __init__(self, tmax=8, num_t=12 * 8, num_reg=4, dtype=torch.float32):
         self._tmax = tmax
         self._num_t = num_t
         self._t = torch.linspace(0, tmax, num_t, dtype=dtype)
@@ -88,6 +88,10 @@ class IF_1TCM_DataSet(torch.utils.data.Dataset):
     def num_reg(self) -> int:
         return self._num_reg
 
+    @property
+    def num_t(self) -> int:
+        return self._num_t
+
     def __len__(self) -> int:
         return 10000
 
@@ -99,29 +103,84 @@ class IF_1TCM_DataSet(torch.utils.data.Dataset):
         for i in range(self._num_reg):
             c_pet[i, :] = generate_random_PET(C_A)(self._t)
 
-        return c_pet, C_A(self._t)
+        return c_pet, C_A(self._t).expand(1, -1)
+
+
+def training_loop(dataloader, model, loss_fn, optimizer, device):
+
+    loss_list = []
+    model.train()
+
+    for i, (x, y) in enumerate(dataloader):
+        x = x.to(device)
+        y = y.to(device)
+
+        x_fwd = model.forward(x)
+
+        loss = loss_fn(x_fwd, y)
+
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        loss_list.append(float(loss.cpu().detach().numpy()))
+
+        if i % 30 == 0:
+            print(
+                f'{(i+1):03} / {(dataloader.dataset.__len__() // dataloader.batch_size):03} loss: {loss_list[-1]:.2E}'
+            )
+
+    return loss_list
 
 
 if __name__ == '__main__':
 
-    batch_size = 5
+    batch_size = 64
+    num_epochs = 50
+    learning_rate = 1e-3
+    #device = torch.device("cuda:0")
+    device = torch.device("cpu")
+
+    #loss_fct = torch.nn.L1Loss()
+    loss_fct = torch.nn.MSELoss()
+    #-------------------------------------------------------------------
+
     ds = IF_1TCM_DataSet()
 
     data_loader = torch.utils.data.DataLoader(ds, batch_size=batch_size)
 
-    while True:
-        cp, ca = next(iter(data_loader))
+    # setup simple dense network
+    model = torch.nn.Sequential(
+        torch.nn.Conv1d(ds.num_reg, 1, kernel_size=1, padding='same'),
+        torch.nn.Linear(ds.num_t, 32), torch.nn.Linear(32, 8),
+        torch.nn.Linear(8, 2), torch.nn.Linear(2, 8), torch.nn.Linear(8, 32),
+        torch.nn.Linear(32, ds.num_t))
+    model = model.to(device)
 
-        fig, ax = plt.subplots(1,
-                               batch_size,
-                               sharey=True,
-                               figsize=(batch_size * 3, 3))
-        for i in range(batch_size):
-            ax[i].plot(ds.t, ca[i, :], '.-')
-            for j in range(ds.num_reg):
-                ax[i].plot(ds.t, cp[i, j, :], '.-')
-        fig.tight_layout()
-        fig.show()
+    training_loss = []
 
-        tmp = input("Continue?")
-        plt.close(fig)
+    # setup the optimizer
+    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+
+    for epoch in np.arange(num_epochs):
+        print(f'epoch {(epoch+1):04} / {num_epochs:04}')
+        training_loss += training_loop(data_loader, model, loss_fct, optimizer,
+                                       device)
+
+with torch.no_grad():
+    cp, ca = next(iter(data_loader))
+    pred = model(cp.to(device))
+
+    num_cols = 8
+    num_rows = int(np.ceil(batch_size / num_cols))
+
+    fig, ax = plt.subplots(num_rows,
+                           num_cols,
+                           figsize=(num_cols * 2, num_cols * 2))
+    for i in range(batch_size):
+        ax.ravel()[i].plot(ds.t, ca[i, 0, :], '.-')
+        for j in range(ds.num_reg):
+            ax.ravel()[i].plot(ds.t, cp[i, j, :], '.-')
+        ax.ravel()[i].plot(ds.t, pred[i, 0, :], 'x-')
+    fig.tight_layout()
+    fig.show()
